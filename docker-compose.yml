@@ -1,0 +1,41 @@
+services:
+  inmonode-db:
+    image: postgres:18
+    container_name: inmonode-db
+    environment:
+      POSTGRES_DB: ${DATABASE_NAME:-inmonode}
+      POSTGRES_USER: ${DATABASE_USER:-postgres}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD:-postgres}
+    ports:
+      # Host port 5433 avoids clashing with a locally installed PostgreSQL on 5432.
+      - "${DATABASE_HOST_PORT:-5433}:5432"
+    volumes:
+      - inmonode-db-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  inmonode-backend:
+    image: inmonode-backend:0.0.1
+    container_name: inmonode-backend
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      inmonode-db:
+        condition: service_healthy
+    ports:
+      - "${PORT:-8080}:8080"
+    environment:
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
+      DATABASE_URL: inmonode-db
+      DATABASE_PORT: 5432
+      DATABASE_NAME: ${DATABASE_NAME:-inmonode}
+      DATABASE_USER: ${DATABASE_USER:-postgres}
+      DATABASE_PASSWORD: ${DATABASE_PASSWORD:-postgres}
+      PORT: 8080
+
+volumes:
+  inmonode-db-data:
