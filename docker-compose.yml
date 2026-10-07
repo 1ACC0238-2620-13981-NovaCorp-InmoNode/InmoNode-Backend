@@ -55,6 +55,7 @@ services:
       MAIL_SMTP_AUTH: "false"
       MAIL_SMTP_STARTTLS: "false"
       MAIL_FROM: ${MAIL_FROM:-no-reply@inmonode.dev}
+      VERIFICATION_URL: ${VERIFICATION_URL:-http://localhost:5173/verify-email}
 
 volumes:
   inmonode-db-data:
