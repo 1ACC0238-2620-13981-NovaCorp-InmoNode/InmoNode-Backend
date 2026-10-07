@@ -35,3 +35,5 @@ ENTRYPOINT ["java", "-jar", "app.jar"]
 # - DATABASE_USER: The username for the database connection.
 # - DATABASE_PASSWORD: The password for the database connection.
 # - PORT: The port on which the application will run (default 8080).
+# - JWT_SECRET: The secret used to sign JSON Web Tokens (at least 32 bytes).
+# - JWT_EXPIRATION_SECONDS: The token lifetime in seconds (default 3600).

@@ -36,6 +36,9 @@ services:
       DATABASE_USER: ${DATABASE_USER:-postgres}
       DATABASE_PASSWORD: ${DATABASE_PASSWORD:-postgres}
       PORT: 8080
+      # The 'prod' profile refuses to start without a JWT secret of at least 32 bytes.
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required; set it in .env}
+      JWT_EXPIRATION_SECONDS: ${JWT_EXPIRATION_SECONDS:-3600}
 
 volumes:
   inmonode-db-data:
