@@ -3,7 +3,9 @@ package com.novacorp.inmonode.inmonodebackend.financial.application.internal.com
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.aggregates.Lot;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.aggregates.Reservation;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.commands.ConsolidateFieldReservationCommand;
+import com.novacorp.inmonode.inmonodebackend.financial.domain.model.commands.ReceiveVoucherEvidenceCommand;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.commands.ReleaseExpiredLotBlocksCommand;
+import com.novacorp.inmonode.inmonodebackend.financial.domain.model.entities.PaymentEvidence;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.FieldReservationOutcome;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.FieldReservationOutcome.ConflictReason;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.ReservationChannel;
@@ -82,6 +84,42 @@ public class ReservationCommandServiceImpl implements ReservationCommandService 
             }
         }
         return released;
+    }
+
+    /**
+     * The lot is locked first, as in the consolidation, and a block that ran out is released before deciding: a
+     * voucher that arrives after the block ended is late even if the release job has not run yet.
+     */
+    @Override
+    @Transactional
+    public PaymentEvidence handle(ReceiveVoucherEvidenceCommand command) {
+        var lotId = reservationRepository.findBySourceEventId(command.reservationId())
+                .map(Reservation::getLotId)
+                .orElseThrow(() -> new IllegalStateException("no reservation %s for the payment evidence %s"
+                        .formatted(command.reservationId(), command.voucherId())));
+        var lot = lotRepository.findByIdForUpdate(lotId)
+                .orElseThrow(() -> new IllegalStateException("lot %d of reservation %s does not exist"
+                        .formatted(lotId, command.reservationId())));
+        var submittedAt = command.submittedAt();
+        if (releaseExpiredBlock(lot, submittedAt)) {
+            lotRepository.save(lot);
+        }
+        // Read under the lock: releasing the block may have expired it.
+        var reservation = reservationRepository.findBySourceEventId(command.reservationId()).orElseThrow();
+        var received = reservation.findEvidence(command.voucherId());
+        if (received.isPresent()) {
+            return received.get();
+        }
+        var evidence = PaymentEvidence.fromVoucher(command.voucherId(), command.amount(), command.operationDate(),
+                command.operationCode(), command.manuallyCorrected(), command.objectKey(), submittedAt);
+        if (reservation.attachEvidence(evidence)) {
+            if (!lot.moveToPendingVerification(Objects.requireNonNull(reservation.getId()), submittedAt)) {
+                throw new IllegalStateException("reservation %s is blocked but does not hold lot %d"
+                        .formatted(command.reservationId(), lotId));
+            }
+            lotRepository.save(lot);
+        }
+        return reservationRepository.save(reservation).findEvidence(command.voucherId()).orElseThrow();
     }
 
     /**

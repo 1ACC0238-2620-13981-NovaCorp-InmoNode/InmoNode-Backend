@@ -3,15 +3,21 @@ package com.novacorp.inmonode.inmonodebackend.vouchers.interfaces.rest;
 import com.jayway.jsonpath.JsonPath;
 import com.novacorp.inmonode.inmonodebackend.S3TestcontainersConfiguration;
 import com.novacorp.inmonode.inmonodebackend.TestcontainersConfiguration;
+import com.novacorp.inmonode.inmonodebackend.financial.domain.model.aggregates.Lot;
+import com.novacorp.inmonode.inmonodebackend.financial.domain.model.aggregates.Project;
+import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.FinancingRules;
+import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.LotBoundary;
+import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.LotDimensions;
+import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.Money;
+import com.novacorp.inmonode.inmonodebackend.financial.domain.repositories.LotRepository;
+import com.novacorp.inmonode.inmonodebackend.financial.domain.repositories.ProjectRepository;
 import com.novacorp.inmonode.inmonodebackend.iam.application.internal.outboundservices.tokens.TokenService;
 import com.novacorp.inmonode.inmonodebackend.iam.domain.model.aggregates.User;
 import com.novacorp.inmonode.inmonodebackend.iam.domain.model.valueobjects.Role;
 import com.novacorp.inmonode.inmonodebackend.iam.domain.model.valueobjects.UserStatus;
-import com.novacorp.inmonode.inmonodebackend.vouchers.domain.model.commands.RecordFieldReservationCommand;
 import com.novacorp.inmonode.inmonodebackend.vouchers.domain.model.valueobjects.VoucherContentType;
 import com.novacorp.inmonode.inmonodebackend.vouchers.domain.model.valueobjects.VoucherStatus;
 import com.novacorp.inmonode.inmonodebackend.vouchers.domain.repositories.VoucherRepository;
-import com.novacorp.inmonode.inmonodebackend.vouchers.domain.services.ReservationOperationCommandService;
 import com.novacorp.inmonode.inmonodebackend.vouchers.interfaces.events.PaymentVoucherReceivedEvent;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -31,10 +37,10 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -69,7 +75,10 @@ class VoucherRegistrationIntegrationTest {
     private TokenService tokenService;
 
     @Autowired
-    private ReservationOperationCommandService operationCommandService;
+    private ProjectRepository projectRepository;
+
+    @Autowired
+    private LotRepository lotRepository;
 
     @Autowired
     private VoucherRepository voucherRepository;
@@ -275,13 +284,34 @@ class VoucherRegistrationIntegrationTest {
         assertTrue(voucherRepository.findByVoucherId(voucher).isEmpty());
     }
 
-    /** A reservation the agent synchronized and that took its lot, as "Lote separado" leaves it. */
-    private UUID operationOf(long agent) {
+    /**
+     * A reservation the agent synchronized and that took its own lot. The real synchronization leaves both the
+     * reservation in financial, which receives the payment evidence, and the operation the voucher belongs to.
+     */
+    private UUID operationOf(long agent) throws Exception {
         var reservation = UUID.randomUUID();
-        operationCommandService.handle(new RecordFieldReservationCommand(reservation, agent, 1L,
-                new BigDecimal("1500.00"), Instant.now().minus(Duration.ofHours(1)),
-                Instant.now().plus(Duration.ofHours(23))));
+        var prospect = UUID.randomUUID();
+        mockMvc.perform(post("/api/v1/field-sync")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(Role.FIELD_AGENT, agent))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"prospects": [{"id": "%s", "document": "12345678", "fullName": "Ana Quispe"}],
+                                 "reservations": [{"id": "%s", "lotId": %d, "prospectId": "%1$s",
+                                                   "initialAmount": 1500, "reservedAt": "%s"}]}"""
+                                .formatted(prospect, reservation, availableLot(), Instant.now().minusSeconds(3600))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.reservations[0].result").value("SYNCED"));
         return reservation;
+    }
+
+    private Long availableLot() {
+        var rules = new FinancingRules(BigDecimal.TEN, BigDecimal.TEN, 60, BigDecimal.ONE);
+        var project = projectRepository.save(Project.create("Comprobantes", "Chilca", null, null, rules));
+        var boundary = LotBoundary.fromPolygonRings(List.of(List.of(
+                List.of(0.0, 0.0), List.of(0.001, 0.0), List.of(0.001, 0.001), List.of(0.0, 0.0))));
+        var lot = Lot.register(project.getId(), "V-01", new LotDimensions(new BigDecimal("120"), null, null),
+                Money.of(new BigDecimal("45000")), boundary);
+        return lotRepository.saveAll(List.of(lot)).getFirst().getId();
     }
 
     /** Asks for the URL and uploads a file of that type and size with it, as the app does. */

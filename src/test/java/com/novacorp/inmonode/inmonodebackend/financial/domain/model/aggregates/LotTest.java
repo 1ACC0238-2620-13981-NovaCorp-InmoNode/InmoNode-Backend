@@ -75,6 +75,37 @@ class LotTest {
     }
 
     @Test
+    void anActiveBlockMovesToPendingVerificationWithNoDeadline() {
+        var lot = newLot();
+        lot.block(10L, NOW, DAY);
+
+        assertTrue(lot.moveToPendingVerification(10L, NOW.plus(DAY).minusSeconds(1)));
+
+        assertEquals(LotStatus.PENDING_VERIFICATION, lot.getStatus());
+        assertEquals(10L, lot.getCurrentReservationId(), "it stays assigned to the reservation");
+        assertNull(lot.getBlockedUntil());
+        var muchLater = NOW.plus(DAY).plus(DAY);
+        assertFalse(lot.isAvailable(muchLater));
+        assertFalse(lot.hasExpiredBlock(muchLater), "the release job no longer frees it");
+        assertEquals(Optional.empty(), lot.releaseExpiredBlock(muchLater));
+        assertFalse(lot.block(11L, muchLater, DAY));
+    }
+
+    @Test
+    void onlyTheReservationHoldingAnActiveBlockMovesTheLotToPendingVerification() {
+        var lot = newLot();
+        assertFalse(lot.moveToPendingVerification(10L, NOW), "an available lot is held by no one");
+
+        lot.block(10L, NOW, DAY);
+        assertFalse(lot.moveToPendingVerification(11L, NOW), "held by another reservation");
+        assertFalse(lot.moveToPendingVerification(10L, NOW.plus(DAY)), "the block ran out");
+
+        assertEquals(LotStatus.BLOCKED, lot.getStatus());
+        assertEquals(10L, lot.getCurrentReservationId());
+        assertEquals(NOW.plus(DAY), lot.getBlockedUntil());
+    }
+
+    @Test
     void reservedOrSoldLotsAreNotAvailable() {
         var reserved = Lot.restore(1L, 5L, "A-01", DIMENSIONS, Money.of(BigDecimal.TEN), BOUNDARY, LotStatus.RESERVED,
                 10L, null);

@@ -97,6 +97,22 @@ public class Lot {
     }
 
     /**
+     * The payment evidence of the reservation holding the lot arrived in time: the lot waits for its verification,
+     * with no deadline, so the release job no longer frees it. It stays assigned to that reservation.
+     *
+     * @return {@code false} when the lot is not held by that reservation or its block already ran out, so it stays as
+     *         it was
+     */
+    public boolean moveToPendingVerification(Long reservationId, Instant now) {
+        if (status != LotStatus.BLOCKED || hasExpiredBlock(now) || !reservationId.equals(currentReservationId)) {
+            return false;
+        }
+        status = LotStatus.PENDING_VERIFICATION;
+        blockedUntil = null;
+        return true;
+    }
+
+    /**
      * Makes the lot available again when its block ran out without payment evidence.
      *
      * @return the reservation that held the expired block; empty when the lot had no expired block
