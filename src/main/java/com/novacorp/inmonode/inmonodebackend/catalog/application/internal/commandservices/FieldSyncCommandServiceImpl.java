@@ -8,11 +8,14 @@ import com.novacorp.inmonode.inmonodebackend.catalog.domain.model.commands.Regis
 import com.novacorp.inmonode.inmonodebackend.catalog.domain.model.commands.SyncFieldRecordsCommand;
 import com.novacorp.inmonode.inmonodebackend.catalog.domain.model.commands.SyncFieldRecordsCommand.ReservationData;
 import com.novacorp.inmonode.inmonodebackend.catalog.domain.model.valueobjects.FieldSyncResult;
+import com.novacorp.inmonode.inmonodebackend.catalog.domain.model.valueobjects.ReservationSyncOutcome;
 import com.novacorp.inmonode.inmonodebackend.catalog.domain.repositories.ProspectRepository;
 import com.novacorp.inmonode.inmonodebackend.catalog.domain.services.FieldSyncCommandService;
 import com.novacorp.inmonode.inmonodebackend.catalog.domain.services.ProspectCommandService;
+import com.novacorp.inmonode.inmonodebackend.catalog.interfaces.events.FieldLotReservedEvent;
 import com.novacorp.inmonode.inmonodebackend.shared.application.result.ApplicationError;
 import com.novacorp.inmonode.inmonodebackend.shared.application.result.Result;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 
 import java.util.HashSet;
@@ -31,15 +34,18 @@ public class FieldSyncCommandServiceImpl implements FieldSyncCommandService {
     private final ProspectRepository prospectRepository;
     private final ExternalFinancialService externalFinancialService;
     private final ExternalIamService externalIamService;
+    private final ApplicationEventPublisher eventPublisher;
 
     public FieldSyncCommandServiceImpl(ProspectCommandService prospectCommandService,
                                        ProspectRepository prospectRepository,
                                        ExternalFinancialService externalFinancialService,
-                                       ExternalIamService externalIamService) {
+                                       ExternalIamService externalIamService,
+                                       ApplicationEventPublisher eventPublisher) {
         this.prospectCommandService = prospectCommandService;
         this.prospectRepository = prospectRepository;
         this.externalFinancialService = externalFinancialService;
         this.externalIamService = externalIamService;
+        this.eventPublisher = eventPublisher;
     }
 
     @Override
@@ -54,9 +60,20 @@ public class FieldSyncCommandServiceImpl implements FieldSyncCommandService {
         }
         var prospectsSynced = prospectCommandService.handle(new RegisterProspectsCommand(agentId, command.prospects()));
         var outcomes = command.reservations().stream()
-                .map(reservation -> externalFinancialService.consolidate(agentId, reservation))
+                .map(reservation -> consolidate(agentId, reservation))
                 .toList();
         return Result.success(new FieldSyncResult(prospectsSynced, outcomes));
+    }
+
+    /** A reservation that took its lot is announced as "Lote separado"; conflicts and re-sends are not. */
+    private ReservationSyncOutcome consolidate(Long agentId, ReservationData reservation) {
+        var outcome = externalFinancialService.consolidate(agentId, reservation);
+        if (outcome.result() == ReservationSyncOutcome.Result.SYNCED) {
+            eventPublisher.publishEvent(new FieldLotReservedEvent(reservation.reservationId(), agentId,
+                    reservation.lotId(), reservation.initialAmount(), reservation.reservedAt(),
+                    outcome.blockedUntil()));
+        }
+        return outcome;
     }
 
     /**
