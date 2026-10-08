@@ -57,6 +57,13 @@ services:
       MAIL_FROM: ${MAIL_FROM:-no-reply@inmonode.dev}
       VERIFICATION_URL: ${VERIFICATION_URL:-http://localhost:5173/verify-email}
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:5173}
+      # Initial staff accounts, created by the first startup on an empty database (see .env.example).
+      STAFF_FIELD_AGENT_EMAIL: ${STAFF_FIELD_AGENT_EMAIL:?STAFF_FIELD_AGENT_EMAIL is required; set it in .env}
+      STAFF_FIELD_AGENT_PASSWORD_HASH: ${STAFF_FIELD_AGENT_PASSWORD_HASH:?STAFF_FIELD_AGENT_PASSWORD_HASH is required; set it in .env}
+      STAFF_CATALOG_ADMIN_EMAIL: ${STAFF_CATALOG_ADMIN_EMAIL:?STAFF_CATALOG_ADMIN_EMAIL is required; set it in .env}
+      STAFF_CATALOG_ADMIN_PASSWORD_HASH: ${STAFF_CATALOG_ADMIN_PASSWORD_HASH:?STAFF_CATALOG_ADMIN_PASSWORD_HASH is required; set it in .env}
+      STAFF_FINANCE_ADMIN_EMAIL: ${STAFF_FINANCE_ADMIN_EMAIL:?STAFF_FINANCE_ADMIN_EMAIL is required; set it in .env}
+      STAFF_FINANCE_ADMIN_PASSWORD_HASH: ${STAFF_FINANCE_ADMIN_PASSWORD_HASH:?STAFF_FINANCE_ADMIN_PASSWORD_HASH is required; set it in .env}
 
 volumes:
   inmonode-db-data:
