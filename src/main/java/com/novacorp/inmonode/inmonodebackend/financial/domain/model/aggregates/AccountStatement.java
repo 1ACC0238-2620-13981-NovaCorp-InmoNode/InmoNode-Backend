@@ -130,6 +130,23 @@ public class AccountStatement {
         return installments.stream().allMatch(Installment::isPaid);
     }
 
+    public Optional<Installment> findInstallment(int number) {
+        return installments.stream().filter(installment -> installment.getNumber() == number).findFirst();
+    }
+
+    /**
+     * US-23: the back office records the payment of an installment, in any order, with exactly what is due (its
+     * amount plus the late fee). Once the last one is paid the statement {@linkplain #isFullyPaid() is paid off}.
+     *
+     * @throws IllegalArgumentException when the installment does not exist or the amount is not exactly what is due
+     * @throws IllegalStateException    when the installment is already paid
+     */
+    public void registerInstallmentPayment(int number, BigDecimal paid, Instant paidAt) {
+        findInstallment(number)
+                .orElseThrow(() -> new IllegalArgumentException("installment %d does not exist".formatted(number)))
+                .registerPayment(paid, paidAt);
+    }
+
     /** The first installment not paid yet, by number. */
     public Optional<Installment> nextInstallment() {
         return installments.stream().filter(installment -> !installment.isPaid()).findFirst();

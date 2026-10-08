@@ -76,6 +76,30 @@ public class Installment {
         return status == InstallmentStatus.PAID;
     }
 
+    /** Whether {@code paid} is exactly what settles it: an installment is paid whole, with its late fee. */
+    public boolean isSettledBy(BigDecimal paid) {
+        return paid != null && paid.compareTo(amountDue()) == 0;
+    }
+
+    /**
+     * Records that it was paid, pending or overdue alike; only its {@code AccountStatement} calls it.
+     *
+     * @throws IllegalStateException    when it is already paid
+     * @throws IllegalArgumentException when the amount is not exactly what is due
+     */
+    public void registerPayment(BigDecimal paid, Instant at) {
+        if (isPaid()) {
+            throw new IllegalStateException("installment %d is already paid".formatted(number));
+        }
+        if (!isSettledBy(paid) || at == null) {
+            throw new IllegalArgumentException("installment %d is settled with exactly %s"
+                    .formatted(number, amountDue()));
+        }
+        status = InstallmentStatus.PAID;
+        paidAt = at;
+        paidAmount = paid.setScale(2, RoundingMode.HALF_UP);
+    }
+
     public @Nullable Long getId() { return id; }
     public int getNumber() { return number; }
     public LocalDate getDueDate() { return dueDate; }

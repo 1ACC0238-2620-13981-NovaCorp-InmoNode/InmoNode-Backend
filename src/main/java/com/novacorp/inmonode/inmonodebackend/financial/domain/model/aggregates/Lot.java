@@ -141,6 +141,20 @@ public class Lot {
         return true;
     }
 
+    /**
+     * The account statement of the reservation holding the lot was paid off: the lot is sold (US-23, Scenario 2). It
+     * stays assigned to that reservation.
+     *
+     * @return {@code false} when the lot is not reserved for that reservation, so it stays as it was
+     */
+    public boolean markSold(Long reservationId) {
+        if (status != LotStatus.RESERVED || !reservationId.equals(currentReservationId)) {
+            return false;
+        }
+        status = LotStatus.SOLD;
+        return true;
+    }
+
     private boolean isWaitingForVerificationOf(Long reservationId) {
         return status == LotStatus.PENDING_VERIFICATION && reservationId.equals(currentReservationId);
     }

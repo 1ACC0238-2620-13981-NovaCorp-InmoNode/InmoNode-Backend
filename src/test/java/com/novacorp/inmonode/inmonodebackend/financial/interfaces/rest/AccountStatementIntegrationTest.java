@@ -13,6 +13,7 @@ import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.FinancingRules;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.LotBoundary;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.LotDimensions;
+import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.LotStatus;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.Money;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.ReservationChannel;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.ReservationStatus;
@@ -49,8 +50,10 @@ import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
 
+import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.notNullValue;
+import static org.hamcrest.Matchers.nullValue;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -172,6 +175,94 @@ class AccountStatementIntegrationTest {
                 .andExpect(status().isUnauthorized());
     }
 
+    @Test
+    void theBackOfficeRecordsPaymentsAndTheLastOneSellsTheLot() throws Exception {
+        var buyer = BUYERS.incrementAndGet();
+        var lot = lot();
+        var transactionId = separate(buyer, lot, quote(buyer, lot));
+        approve(sendVoucher(transactionId));
+        acknowledge(buyer, issue(buyer, transactionId)).andExpect(status().isOk());
+        var statementId = statementIdOf(buyer, transactionId);
+
+        var paidAt = Instant.now().minus(1, ChronoUnit.DAYS).truncatedTo(ChronoUnit.SECONDS);
+        pay(statementId, 2, "{\"amount\": 3198.56, \"paidAt\": \"%s\"}".formatted(paidAt))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(statementId))
+                .andExpect(jsonPath("$.installments[1].status").value("PAID"))
+                .andExpect(jsonPath("$.installments[1].paidAmount").value(3198.56))
+                .andExpect(jsonPath("$.installments[1].paidAt").value(paidAt.toString()))
+                .andExpect(jsonPath("$.paidAmount").value(12198.56))
+                .andExpect(jsonPath("$.balance").value(35184.10))
+                .andExpect(jsonPath("$.nextInstallment.number").value(1))
+                .andExpect(jsonPath("$.fullyPaid").value(false));
+        statementOf(buyer, transactionId)
+                .andExpect(jsonPath("$.installments[1].status").value("PAID"))
+                .andExpect(jsonPath("$.balance").value(35184.10));
+
+        pay(statementId, 2, "{\"amount\": 3198.56}")
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("INSTALLMENT_CONFLICT"));
+        pay(statementId, 1, "{\"amount\": 3000}")
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.code").value("BUSINESS_RULE_VIOLATION"))
+                .andExpect(jsonPath("$.details").value(containsString("3198.56 PEN")));
+
+        for (var number = 1; number <= 11; number++) {
+            if (number != 2) {
+                pay(statementId, number, "{\"amount\": 3198.56}").andExpect(status().isOk());
+            }
+        }
+        assertEquals(LotStatus.RESERVED, lotRepository.findById(lot.getId()).orElseThrow().getStatus());
+        pay(statementId, 12, "{\"amount\": 3198.50}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.fullyPaid").value(true))
+                .andExpect(jsonPath("$.balance").value(0.00))
+                .andExpect(jsonPath("$.paidAmount").value(47382.66))
+                .andExpect(jsonPath("$.progressPercentage").value(100.00))
+                .andExpect(jsonPath("$.nextInstallment", nullValue()))
+                .andExpect(jsonPath("$.dueSoon").value(false));
+
+        assertEquals(LotStatus.SOLD, lotRepository.findById(lot.getId()).orElseThrow().getStatus());
+        mockMvc.perform(get("/api/v1/projects/{id}/lots", lot.getProjectId()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.features[0].properties.status").value("SOLD"));
+        statementOf(buyer, transactionId).andExpect(jsonPath("$.fullyPaid").value(true));
+    }
+
+    @Test
+    void aPaymentNeedsAnExistingInstallmentAPastDateAndTheBackOffice() throws Exception {
+        var buyer = BUYERS.incrementAndGet();
+        var lot = lot();
+        var transactionId = separate(buyer, lot, quote(buyer, lot));
+        approve(sendVoucher(transactionId));
+        acknowledge(buyer, issue(buyer, transactionId)).andExpect(status().isOk());
+        var statementId = statementIdOf(buyer, transactionId);
+
+        pay(999_999L, 1, "{\"amount\": 3198.56}")
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("ACCOUNT_STATEMENT_NOT_FOUND"));
+        pay(statementId, 13, "{\"amount\": 3198.56}")
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("INSTALLMENT_NOT_FOUND"));
+        pay(statementId, 1, "{\"amount\": 3198.56, \"paidAt\": \"%s\"}"
+                .formatted(Instant.now().plus(1, ChronoUnit.DAYS)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+        pay(statementId, 1, "{\"amount\": -5}").andExpect(status().isBadRequest());
+        pay(statementId, 1, "{}").andExpect(status().isBadRequest());
+        mockMvc.perform(post("/api/v1/account-statements/{id}/installments/1/payment", statementId)
+                        .header(HttpHeaders.AUTHORIZATION, bearer(Role.BUYER, buyer))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"amount\": 3198.56}"))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(post("/api/v1/account-statements/{id}/installments/1/payment", statementId)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"amount\": 3198.56}"))
+                .andExpect(status().isUnauthorized());
+
+        statementOf(buyer, transactionId)
+                .andExpect(jsonPath("$.paidAmount").value(9000.00))
+                .andExpect(jsonPath("$.installments[0].status").value("PENDING"));
+    }
+
     /** Web reservations made before the plan was kept have nothing to schedule: the agreement still works. */
     @Test
     void aReservationWithoutPlanIsAgreedWithoutStatement() throws Exception {
@@ -199,6 +290,18 @@ class AccountStatementIntegrationTest {
     private ResultActions statementOf(long buyer, UUID transactionId) throws Exception {
         return mockMvc.perform(get("/api/v1/reservations/{id}/account-statement", transactionId)
                 .header(HttpHeaders.AUTHORIZATION, bearer(Role.BUYER, buyer)));
+    }
+
+    private long statementIdOf(long buyer, UUID transactionId) throws Exception {
+        var answer = statementOf(buyer, transactionId).andReturn().getResponse().getContentAsString();
+        return JsonPath.<Number>read(answer, "$.id").longValue();
+    }
+
+    private ResultActions pay(long statementId, int number, String body) throws Exception {
+        return mockMvc.perform(post("/api/v1/account-statements/{id}/installments/{number}/payment",
+                        statementId, number)
+                .header(HttpHeaders.AUTHORIZATION, bearer(Role.FINANCE_ADMIN, 77L))
+                .contentType(MediaType.APPLICATION_JSON).content(body));
     }
 
     private ResultActions acknowledge(long buyer, long contractId) throws Exception {

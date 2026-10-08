@@ -100,6 +100,67 @@ class AccountStatementTest {
     }
 
     @Test
+    void anInstallmentIsPaidWithExactlyWhatIsDueInAnyOrder() {
+        var statement = AccountStatement.open(contract(5L), reservation(PLAN), NOW);
+        var paidAt = NOW.plusSeconds(86_400 * 30);
+
+        statement.registerInstallmentPayment(3, new BigDecimal("3198.56"), paidAt);
+
+        var third = statement.findInstallment(3).orElseThrow();
+        assertEquals(InstallmentStatus.PAID, third.getStatus());
+        assertEquals(paidAt, third.getPaidAt());
+        assertEquals(new BigDecimal("3198.56"), third.getPaidAmount());
+        assertEquals(new BigDecimal("12198.56"), statement.paidAmount());
+        assertEquals(new BigDecimal("35184.10"), statement.balance());
+        assertEquals(1, statement.nextInstallment().orElseThrow().getNumber());
+        assertFalse(statement.isFullyPaid());
+    }
+
+    @Test
+    void anOverdueInstallmentIsPaidWithItsLateFee() {
+        var opened = AccountStatement.open(contract(5L), reservation(PLAN), NOW);
+        var installments = new ArrayList<>(opened.getInstallments());
+        installments.set(0, overdue(installments.get(0), new BigDecimal("31.99")));
+        var statement = restore(opened, installments);
+        var first = statement.findInstallment(1).orElseThrow();
+
+        assertFalse(first.isSettledBy(new BigDecimal("3198.56")));
+        assertThrows(IllegalArgumentException.class,
+                () -> statement.registerInstallmentPayment(1, new BigDecimal("3198.56"), NOW));
+        assertTrue(first.isSettledBy(new BigDecimal("3230.55")));
+        statement.registerInstallmentPayment(1, new BigDecimal("3230.55"), NOW);
+
+        assertEquals(InstallmentStatus.PAID, first.getStatus());
+        assertEquals(new BigDecimal("12230.55"), statement.paidAmount());
+    }
+
+    @Test
+    void aPaidOrUnknownInstallmentCannotBePaid() {
+        var statement = AccountStatement.open(contract(5L), reservation(PLAN), NOW);
+        statement.registerInstallmentPayment(1, new BigDecimal("3198.56"), NOW);
+
+        assertThrows(IllegalStateException.class,
+                () -> statement.registerInstallmentPayment(1, new BigDecimal("3198.56"), NOW));
+        assertThrows(IllegalArgumentException.class,
+                () -> statement.registerInstallmentPayment(13, new BigDecimal("3198.56"), NOW));
+        assertThrows(IllegalArgumentException.class,
+                () -> statement.registerInstallmentPayment(2, new BigDecimal("3198.57"), NOW));
+        assertTrue(statement.findInstallment(13).isEmpty());
+    }
+
+    @Test
+    void theLastPaymentPaysTheStatementOff() {
+        var statement = AccountStatement.open(contract(5L), reservation(PLAN), NOW);
+        statement.getInstallments().forEach(installment ->
+                statement.registerInstallmentPayment(installment.getNumber(), installment.amountDue(), NOW));
+
+        assertTrue(statement.isFullyPaid());
+        assertEquals(new BigDecimal("0.00"), statement.balance());
+        assertEquals(new BigDecimal("47382.66"), statement.paidAmount());
+        assertEquals(new BigDecimal("100.00"), statement.progressPercentage());
+    }
+
+    @Test
     void theNextInstallmentIsDueSoonWithinFiveDaysOrWhenLate() {
         var statement = AccountStatement.open(contract(5L), reservation(PLAN), NOW);
 
