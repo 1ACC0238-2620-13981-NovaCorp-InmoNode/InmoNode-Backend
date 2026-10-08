@@ -3,8 +3,10 @@ package com.novacorp.inmonode.inmonodebackend.financial.domain.services;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.commands.ConsolidateFieldReservationCommand;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.commands.ReceiveVoucherEvidenceCommand;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.commands.ReleaseExpiredLotBlocksCommand;
+import com.novacorp.inmonode.inmonodebackend.financial.domain.model.commands.RequestWebReservationCommand;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.entities.PaymentEvidence;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.FieldReservationOutcome;
+import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.WebReservationOutcome;
 
 /**
  * Command side of reservations: this context is the only authority on lot availability (Context Map).
@@ -16,6 +18,13 @@ public interface ReservationCommandService {
      * the server takes the lot; a later one is kept as a conflict; a re-send is answered as a duplicate.
      */
     FieldReservationOutcome handle(ConsolidateFieldReservationCommand command);
+
+    /**
+     * US-19: blocks a lot of a published project for a buyer's web separation request, for one hour. The first request
+     * to lock the lot takes it; a later one is answered {@code LOT_UNAVAILABLE} and nothing is stored. Idempotent by
+     * the request's transaction id.
+     */
+    WebReservationOutcome handle(RequestWebReservationCommand command);
 
     /**
      * Releases the expired lot blocks; run periodically. A block that ran out already counts as available, so this

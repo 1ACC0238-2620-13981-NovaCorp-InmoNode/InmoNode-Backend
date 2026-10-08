@@ -39,6 +39,25 @@ class ReservationTest {
     }
 
     @Test
+    void webRequestHoldsTheLotForTheBuyerWithoutAProspect() {
+        var reservation = Reservation.fromWebRequest(3L, 41L, SOURCE, AMOUNT, RESERVED_AT);
+
+        assertEquals(ReservationStatus.BLOCKED, reservation.getStatus());
+        assertEquals(ReservationChannel.WEB, reservation.getChannel());
+        assertEquals(3L, reservation.getLotId());
+        assertEquals(41L, reservation.getRequesterId());
+        assertNull(reservation.getProspectId());
+        assertEquals(SOURCE, reservation.getSourceEventId());
+        assertEquals(AMOUNT, reservation.getInitialAmount());
+        assertEquals(RESERVED_AT, reservation.getReservedAt());
+        assertTrue(reservation.getEvidences().isEmpty());
+        assertThrows(IllegalArgumentException.class,
+                () -> Reservation.fromWebRequest(3L, 41L, null, AMOUNT, RESERVED_AT));
+        assertThrows(IllegalArgumentException.class,
+                () -> Reservation.fromWebRequest(3L, null, SOURCE, AMOUNT, RESERVED_AT));
+    }
+
+    @Test
     void conflictedReservationIsKeptAsCancelled() {
         var reservation = Reservation.cancelledByConflict(3L, 7L, PROSPECT, SOURCE, AMOUNT, RESERVED_AT);
 

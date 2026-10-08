@@ -1,15 +1,20 @@
 package com.novacorp.inmonode.inmonodebackend.financial.application.internal.commandservices;
 
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.aggregates.Lot;
+import com.novacorp.inmonode.inmonodebackend.financial.domain.model.aggregates.Project;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.aggregates.Reservation;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.commands.ConsolidateFieldReservationCommand;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.commands.ReceiveVoucherEvidenceCommand;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.commands.ReleaseExpiredLotBlocksCommand;
+import com.novacorp.inmonode.inmonodebackend.financial.domain.model.commands.RequestWebReservationCommand;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.entities.PaymentEvidence;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.FieldReservationOutcome;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.FieldReservationOutcome.ConflictReason;
+import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.LotStatus;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.ReservationChannel;
+import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.WebReservationOutcome;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.repositories.LotRepository;
+import com.novacorp.inmonode.inmonodebackend.financial.domain.repositories.ProjectRepository;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.repositories.ReservationRepository;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.services.ReservationCommandService;
 import org.springframework.stereotype.Service;
@@ -25,12 +30,14 @@ public class ReservationCommandServiceImpl implements ReservationCommandService 
 
     private final LotRepository lotRepository;
     private final ReservationRepository reservationRepository;
+    private final ProjectRepository projectRepository;
     private final Clock clock;
 
     public ReservationCommandServiceImpl(LotRepository lotRepository, ReservationRepository reservationRepository,
-                                         Clock clock) {
+                                         ProjectRepository projectRepository, Clock clock) {
         this.lotRepository = lotRepository;
         this.reservationRepository = reservationRepository;
+        this.projectRepository = projectRepository;
         this.clock = clock;
     }
 
@@ -65,6 +72,40 @@ public class ReservationCommandServiceImpl implements ReservationCommandService 
         lot.block(Objects.requireNonNull(reservation.getId()), now, ReservationChannel.FIELD.blockValidity());
         var blocked = lotRepository.save(lot);
         return FieldReservationOutcome.synced(reservation, Objects.requireNonNull(blocked.getBlockedUntil()));
+    }
+
+    /**
+     * Same lock as the field consolidation, so web and field requests for one lot are decided one after the other.
+     * Joins the caller's transaction: the requesting context stores its request together with the block.
+     */
+    @Override
+    @Transactional
+    public WebReservationOutcome handle(RequestWebReservationCommand command) {
+        var lot = lotRepository.findByIdForUpdate(command.lotId()).orElse(null);
+        var published = lot != null && projectRepository.findById(lot.getProjectId())
+                .filter(Project::isPublished)
+                .isPresent();
+        if (!published) {
+            return WebReservationOutcome.lotNotFound();
+        }
+        var now = clock.instant().truncatedTo(ChronoUnit.MICROS);
+        var existing = reservationRepository.findBySourceEventId(command.sourceEventId());
+        if (existing.isPresent()) {
+            var stillHeld = Objects.equals(lot.getCurrentReservationId(), existing.get().getId())
+                    && lot.getStatus() == LotStatus.BLOCKED && !lot.hasExpiredBlock(now);
+            return stillHeld
+                    ? WebReservationOutcome.blocked(existing.get(), Objects.requireNonNull(lot.getBlockedUntil()))
+                    : WebReservationOutcome.unavailable();
+        }
+        releaseExpiredBlock(lot, now);
+        if (!lot.isAvailable(now)) {
+            return WebReservationOutcome.unavailable();
+        }
+        var reservation = reservationRepository.save(Reservation.fromWebRequest(command.lotId(), command.buyerId(),
+                command.sourceEventId(), command.initialAmount(), command.requestedAt()));
+        lot.block(Objects.requireNonNull(reservation.getId()), now, ReservationChannel.WEB.blockValidity());
+        var blocked = lotRepository.save(lot);
+        return WebReservationOutcome.blocked(reservation, Objects.requireNonNull(blocked.getBlockedUntil()));
     }
 
     /**

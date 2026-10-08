@@ -44,6 +44,11 @@ public class LotRepositoryImpl implements LotRepository {
     }
 
     @Override
+    public Optional<Lot> findById(Long id) {
+        return jpaRepository.findById(id).map(LotEntityAssembler::toDomain);
+    }
+
+    @Override
     public Optional<Lot> findByIdForUpdate(Long id) {
         return jpaRepository.findByIdForUpdate(id).map(LotEntityAssembler::toDomain);
     }

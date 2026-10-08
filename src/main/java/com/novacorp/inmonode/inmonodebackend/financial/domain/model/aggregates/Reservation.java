@@ -70,6 +70,23 @@ public class Reservation {
                 ReservationStatus.CANCELLED_BY_CONFLICT);
     }
 
+    /**
+     * US-19: a buyer's separation request from the web portal that found the lot available. It holds the lot
+     * ({@code BLOCKED}) while the payment evidence arrives; a web request is never stored as a conflict, the requesting
+     * context keeps the rejection instead.
+     *
+     * @param sourceEventId the request's transaction id, shared by every context
+     * @param initialAmount the down payment of the quotation the buyer accepted
+     */
+    public static Reservation fromWebRequest(Long lotId, Long buyerId, UUID sourceEventId, Money initialAmount,
+                                             Instant requestedAt) {
+        if (lotId == null || buyerId == null || sourceEventId == null || initialAmount == null || requestedAt == null) {
+            throw new IllegalArgumentException("a web reservation needs its lot, buyer, id, amount and date");
+        }
+        return new Reservation(null, lotId, ReservationChannel.WEB, buyerId, null, sourceEventId, initialAmount,
+                requestedAt, ReservationStatus.BLOCKED, List.of());
+    }
+
     /** Rebuilds an already persisted reservation, with the payment evidences it received. */
     public static Reservation restore(Long id, Long lotId, ReservationChannel channel, Long requesterId,
                                       @Nullable UUID prospectId, @Nullable UUID sourceEventId, Money initialAmount,
