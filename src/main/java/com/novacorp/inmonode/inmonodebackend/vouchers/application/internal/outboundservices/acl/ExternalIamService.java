@@ -6,8 +6,8 @@ import org.springframework.stereotype.Service;
 import java.util.Optional;
 
 /**
- * Anti-corruption layer towards IAM: who the calling agent is. Named bean, because other contexts have an ACL class
- * with the same simple name.
+ * Anti-corruption layer towards IAM: who the caller is, the agent of a field reservation or the buyer of a web
+ * separation. Named bean, because other contexts have an ACL class with the same simple name.
  */
 @Service("vouchersExternalIamService")
 public class ExternalIamService {
@@ -18,8 +18,8 @@ public class ExternalIamService {
         this.iamContextFacade = iamContextFacade;
     }
 
-    /** The authenticated agent; empty when the request carries no valid token. */
-    public Optional<Long> currentAgentId() {
+    /** The authenticated user; empty when the request carries no valid token. */
+    public Optional<Long> currentUserId() {
         return iamContextFacade.currentUserId();
     }
 }

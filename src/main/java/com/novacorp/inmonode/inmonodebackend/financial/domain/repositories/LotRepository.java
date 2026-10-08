@@ -22,6 +22,9 @@ public interface LotRepository {
 
     Lot save(Lot lot);
 
+    /** Reads the lot without locking it, for queries; decisions about its availability lock it first. */
+    Optional<Lot> findById(Long id);
+
     /**
      * Reads the lot and locks it until the current transaction ends, so concurrent reservations of the same lot
      * are decided one after the other: the first to reach the server wins (US-12).

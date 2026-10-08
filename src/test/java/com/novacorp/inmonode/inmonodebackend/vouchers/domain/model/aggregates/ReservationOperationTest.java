@@ -40,6 +40,23 @@ class ReservationOperationTest {
     }
 
     @Test
+    void aWebRequestIsOwnedByTheBuyerAndDueWhenItsLockEnds() {
+        var operation = ReservationOperation.fromWebRequest(RESERVATION, 41L, 31L, AMOUNT, RESERVED_AT, DUE_AT);
+
+        assertEquals(OperationChannel.WEB, operation.getChannel());
+        assertEquals(41L, operation.getOwnerId());
+        assertEquals(31L, operation.getLotId());
+        assertEquals(AMOUNT, operation.getInitialAmount());
+        assertEquals(RESERVED_AT, operation.getReservedAt());
+        assertEquals(DUE_AT, operation.getEvidenceDueAt());
+        assertTrue(operation.isOwnedBy(41L));
+        assertThrows(IllegalArgumentException.class,
+                () -> ReservationOperation.fromWebRequest(RESERVATION, 41L, 31L, AMOUNT, RESERVED_AT, null));
+        assertThrows(IllegalArgumentException.class,
+                () -> ReservationOperation.fromWebRequest(RESERVATION, null, 31L, AMOUNT, RESERVED_AT, DUE_AT));
+    }
+
+    @Test
     void aFieldReservationNeedsItsIdAgentLotAmountAndDate() {
         assertThrows(IllegalArgumentException.class,
                 () -> ReservationOperation.fromFieldReservation(null, 7L, 31L, AMOUNT, RESERVED_AT, DUE_AT));

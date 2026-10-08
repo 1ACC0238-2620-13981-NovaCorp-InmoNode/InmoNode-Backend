@@ -5,9 +5,11 @@ import com.novacorp.inmonode.inmonodebackend.financial.domain.model.aggregates.L
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.aggregates.Project;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.queries.GetProjectByIdQuery;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.queries.GetProjectLotsQuery;
+import com.novacorp.inmonode.inmonodebackend.financial.domain.model.queries.GetPublishedLotQuery;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.queries.GetPublishedProjectsQuery;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.LotStatistics;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.ProjectSummary;
+import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.PublishedLot;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.repositories.LotRepository;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.repositories.ProjectRepository;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.services.ProjectQueryService;
@@ -18,6 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 
 @Service
 @Transactional(readOnly = true)
@@ -54,6 +57,14 @@ public class ProjectQueryServiceImpl implements ProjectQueryService {
     public Result<List<Lot>, ApplicationError> handle(GetProjectLotsQuery query) {
         return visibleProject(query.projectId())
                 .map(project -> lotRepository.findByProjectId(query.projectId()));
+    }
+
+    @Override
+    public Optional<PublishedLot> handle(GetPublishedLotQuery query) {
+        return lotRepository.findById(query.lotId())
+                .flatMap(lot -> projectRepository.findById(lot.getProjectId())
+                        .filter(Project::isPublished)
+                        .map(project -> new PublishedLot(project, lot)));
     }
 
     /** The project when it is published, or a draft seen by the catalog back-office; not found otherwise. */
