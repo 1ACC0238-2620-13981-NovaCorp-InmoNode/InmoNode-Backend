@@ -17,6 +17,21 @@ services:
       timeout: 5s
       retries: 10
 
+  inmonode-storage:
+    # Local S3-compatible file repository for vouchers (AWS S3 in production). RustFS, because MinIO no longer
+    # publishes its images. API on 9000, web console on 9001.
+    image: rustfs/rustfs:1.0.0
+    container_name: inmonode-storage
+    environment:
+      RUSTFS_ACCESS_KEY: ${STORAGE_S3_ACCESS_KEY:-inmonode-dev}
+      RUSTFS_SECRET_KEY: ${STORAGE_S3_SECRET_KEY:-inmonode-dev-secret}
+      RUSTFS_CONSOLE_ENABLE: "true"
+    ports:
+      - "${STORAGE_HOST_PORT:-9000}:9000"
+      - "${STORAGE_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - inmonode-storage-data:/data
+
   inmonode-mail:
     # Local SMTP server: catches every outgoing email. Web inbox at http://localhost:8025.
     image: axllent/mailpit:v1.31.3
@@ -35,6 +50,8 @@ services:
       inmonode-db:
         condition: service_healthy
       inmonode-mail:
+        condition: service_started
+      inmonode-storage:
         condition: service_started
     ports:
       - "${PORT:-8080}:8080"
@@ -67,6 +84,16 @@ services:
       STAFF_CATALOG_ADMIN_PASSWORD_HASH: ${STAFF_CATALOG_ADMIN_PASSWORD_HASH:?STAFF_CATALOG_ADMIN_PASSWORD_HASH is required; set it in .env}
       STAFF_FINANCE_ADMIN_EMAIL: ${STAFF_FINANCE_ADMIN_EMAIL:?STAFF_FINANCE_ADMIN_EMAIL is required; set it in .env}
       STAFF_FINANCE_ADMIN_PASSWORD_HASH: ${STAFF_FINANCE_ADMIN_PASSWORD_HASH:?STAFF_FINANCE_ADMIN_PASSWORD_HASH is required; set it in .env}
+      # The backend reaches the storage inside the network; presigned URLs must use an address clients can reach.
+      STORAGE_S3_ENDPOINT: http://inmonode-storage:9000
+      STORAGE_S3_PUBLIC_ENDPOINT: ${STORAGE_S3_PUBLIC_ENDPOINT:-http://localhost:9000}
+      STORAGE_S3_REGION: us-east-1
+      STORAGE_S3_BUCKET: ${STORAGE_S3_BUCKET:-inmonode-vouchers}
+      STORAGE_S3_ACCESS_KEY: ${STORAGE_S3_ACCESS_KEY:-inmonode-dev}
+      STORAGE_S3_SECRET_KEY: ${STORAGE_S3_SECRET_KEY:-inmonode-dev-secret}
+      STORAGE_S3_PATH_STYLE_ACCESS: "true"
+      STORAGE_S3_CREATE_BUCKET: "true"
 
 volumes:
   inmonode-db-data:
+  inmonode-storage-data:

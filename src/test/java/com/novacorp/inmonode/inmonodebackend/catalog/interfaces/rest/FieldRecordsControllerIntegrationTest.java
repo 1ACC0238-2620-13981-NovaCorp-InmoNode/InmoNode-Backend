@@ -3,6 +3,7 @@ package com.novacorp.inmonode.inmonodebackend.catalog.interfaces.rest;
 import com.jayway.jsonpath.JsonPath;
 import com.novacorp.inmonode.inmonodebackend.TestcontainersConfiguration;
 import com.novacorp.inmonode.inmonodebackend.catalog.domain.repositories.ProspectRepository;
+import com.novacorp.inmonode.inmonodebackend.catalog.interfaces.events.FieldLotReservedEvent;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.repositories.ReservationRepository;
 import com.novacorp.inmonode.inmonodebackend.iam.application.internal.outboundservices.tokens.TokenService;
 import com.novacorp.inmonode.inmonodebackend.iam.domain.model.aggregates.User;
@@ -17,10 +18,14 @@ import org.springframework.core.io.ClassPathResource;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.event.ApplicationEvents;
+import org.springframework.test.context.event.RecordApplicationEvents;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 
+import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -42,6 +47,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
 @Import(TestcontainersConfiguration.class)
+@RecordApplicationEvents
 class FieldRecordsControllerIntegrationTest {
 
     private static final AtomicLong AGENTS = new AtomicLong(1_000);
@@ -57,6 +63,9 @@ class FieldRecordsControllerIntegrationTest {
 
     @Autowired
     private ReservationRepository reservationRepository;
+
+    @Autowired
+    private ApplicationEvents events;
 
     @Test
     void eachReservationGetsItsOwnResultAndAcceptedOnesHoldTheirLots() throws Exception {
@@ -116,6 +125,36 @@ class FieldRecordsControllerIntegrationTest {
                 .andExpect(jsonPath("$.reservations[1].result").value("DUPLICATE"))
                 .andExpect(jsonPath("$.reservations[1].originalResult").value("CONFLICT"));
         assertEquals(1, prospectRepository.findByProspectIds(List.of(ana)).size());
+    }
+
+    @Test
+    void aReservationThatTookItsLotIsAnnouncedAsLotReservedAndAgainOnEveryReSend() throws Exception {
+        var agent = AGENTS.incrementAndGet();
+        var lots = lotIdsByCode(publishedProject());
+        var ana = UUID.randomUUID();
+        var taken = UUID.randomUUID();
+        var body = payload(List.of(prospect(ana, "12345678", "Ana Quispe")),
+                List.of(reservation(taken, lots.get("A-01"), ana),
+                        reservation(UUID.randomUUID(), lots.get("A-01"), ana)));
+
+        sync(agent, body).andExpect(status().isOk());
+
+        var announced = events.stream(FieldLotReservedEvent.class).toList();
+        assertEquals(1, announced.size(), "the conflicting reservation is not announced");
+        var event = announced.getFirst();
+        assertEquals(taken, event.reservationId());
+        assertEquals(agent, event.agentId());
+        assertEquals(lots.get("A-01"), event.lotId());
+        assertEquals(0, new BigDecimal("1500").compareTo(event.initialAmount()));
+        assertEquals(Instant.parse("2026-10-08T09:30:00Z"), event.reservedAt());
+        assertNotNull(event.blockedUntil());
+
+        sync(agent, body)
+                .andExpect(jsonPath("$.reservations[0].result").value("DUPLICATE"))
+                .andExpect(jsonPath("$.reservations[1].result").value("DUPLICATE"));
+        var reAnnounced = events.stream(FieldLotReservedEvent.class).toList();
+        assertEquals(2, reAnnounced.size(), "a re-send is announced again (at-least-once); the conflicting one never");
+        assertEquals(event, reAnnounced.getLast(), "the re-send carries the same data");
     }
 
     @Test

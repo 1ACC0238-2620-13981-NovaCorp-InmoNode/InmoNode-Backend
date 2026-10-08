@@ -1,6 +1,9 @@
 package com.novacorp.inmonode.inmonodebackend.financial.domain.model.aggregates;
 
+import com.novacorp.inmonode.inmonodebackend.financial.domain.model.entities.PaymentEvidence;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.Money;
+import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.PaymentEvidenceSource;
+import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.PaymentEvidenceStatus;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.ReservationChannel;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.ReservationStatus;
 import org.junit.jupiter.api.Test;
@@ -8,6 +11,8 @@ import org.junit.jupiter.api.Test;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.util.List;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -49,6 +54,79 @@ class ReservationTest {
         assertTrue(reservation.expire());
         assertEquals(ReservationStatus.EXPIRED, reservation.getStatus());
         assertFalse(reservation.expire());
+    }
+
+    @Test
+    void evidenceOnTimeMovesTheReservationToPendingVerification() {
+        var reservation = Reservation.fromFieldSync(3L, 7L, PROSPECT, SOURCE, AMOUNT, RESERVED_AT);
+        var evidence = voucherEvidence();
+
+        assertTrue(reservation.attachEvidence(evidence));
+
+        assertEquals(ReservationStatus.PENDING_VERIFICATION, reservation.getStatus());
+        assertEquals(List.of(evidence), reservation.getEvidences());
+        var attached = reservation.findEvidence(evidence.getReference()).orElseThrow();
+        assertFalse(attached.isLate());
+        assertEquals(PaymentEvidenceSource.VOUCHER, attached.getSource());
+        assertEquals(PaymentEvidenceStatus.PENDING, attached.getStatus());
+        assertFalse(reservation.expire(), "a reservation waiting for verification no longer expires");
+    }
+
+    @Test
+    void evidenceOfAReservationThatNoLongerHoldsItsLotIsKeptAsLate() {
+        var expired = Reservation.fromFieldSync(3L, 7L, PROSPECT, SOURCE, AMOUNT, RESERVED_AT);
+        expired.expire();
+        var conflicted = Reservation.cancelledByConflict(3L, 7L, PROSPECT, UUID.randomUUID(), AMOUNT, RESERVED_AT);
+
+        for (var reservation : List.of(expired, conflicted)) {
+            var status = reservation.getStatus();
+            var evidence = voucherEvidence();
+
+            assertFalse(reservation.attachEvidence(evidence), status.name());
+
+            assertEquals(status, reservation.getStatus(), "the reservation stays as it is");
+            assertTrue(reservation.findEvidence(evidence.getReference()).orElseThrow().isLate(), status.name());
+        }
+    }
+
+    @Test
+    void anotherEvidenceWhileWaitingForVerificationIsKeptWithoutChanges() {
+        var reservation = Reservation.fromFieldSync(3L, 7L, PROSPECT, SOURCE, AMOUNT, RESERVED_AT);
+        reservation.attachEvidence(voucherEvidence());
+        var second = voucherEvidence();
+
+        assertFalse(reservation.attachEvidence(second));
+
+        assertEquals(ReservationStatus.PENDING_VERIFICATION, reservation.getStatus());
+        assertEquals(2, reservation.getEvidences().size());
+        assertFalse(reservation.findEvidence(second.getReference()).orElseThrow().isLate());
+    }
+
+    @Test
+    void theSameEvidenceIsNeverAttachedTwice() {
+        var reservation = Reservation.fromFieldSync(3L, 7L, PROSPECT, SOURCE, AMOUNT, RESERVED_AT);
+        var evidence = voucherEvidence();
+        reservation.attachEvidence(evidence);
+
+        assertThrows(IllegalStateException.class, () -> reservation.attachEvidence(evidence));
+        assertEquals(1, reservation.getEvidences().size());
+    }
+
+    @Test
+    void aVoucherEvidenceNeedsItsDataAndItsFile() {
+        var day = LocalDate.parse("2026-10-08");
+        assertThrows(IllegalArgumentException.class, () -> PaymentEvidence.fromVoucher(null, AMOUNT, day, "OP-1",
+                false, "vouchers/a.jpg", RESERVED_AT));
+        assertThrows(IllegalArgumentException.class, () -> PaymentEvidence.fromVoucher(UUID.randomUUID(), AMOUNT,
+                day, " ", false, "vouchers/a.jpg", RESERVED_AT));
+        assertThrows(IllegalArgumentException.class, () -> PaymentEvidence.fromVoucher(UUID.randomUUID(), AMOUNT,
+                day, "OP-1", false, null, RESERVED_AT));
+    }
+
+    private static PaymentEvidence voucherEvidence() {
+        var voucher = UUID.randomUUID();
+        return PaymentEvidence.fromVoucher(voucher, AMOUNT, LocalDate.parse("2026-10-08"), "00123456", false,
+                "vouchers/%s/%s.jpg".formatted(SOURCE, voucher), RESERVED_AT.plusSeconds(600));
     }
 
     @Test

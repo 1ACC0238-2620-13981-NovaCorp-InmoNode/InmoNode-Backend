@@ -1,7 +1,9 @@
 package com.novacorp.inmonode.inmonodebackend.financial.domain.services;
 
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.commands.ConsolidateFieldReservationCommand;
+import com.novacorp.inmonode.inmonodebackend.financial.domain.model.commands.ReceiveVoucherEvidenceCommand;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.commands.ReleaseExpiredLotBlocksCommand;
+import com.novacorp.inmonode.inmonodebackend.financial.domain.model.entities.PaymentEvidence;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.FieldReservationOutcome;
 
 /**
@@ -22,4 +24,14 @@ public interface ReservationCommandService {
      * @return how many lots were released
      */
     int handle(ReleaseExpiredLotBlocksCommand command);
+
+    /**
+     * US-20, 2.6.4.1: attaches a voucher to its reservation as payment evidence. On time, the reservation and its lot
+     * wait for verification ({@code PENDING_VERIFICATION}); late, the evidence is kept for the back office and nothing
+     * else changes. Idempotent by the voucher id: a voucher already attached is answered with its evidence.
+     *
+     * @throws IllegalStateException when there is no reservation with that id, which the vouchers context only knows
+     *                               after this context consolidated it
+     */
+    PaymentEvidence handle(ReceiveVoucherEvidenceCommand command);
 }

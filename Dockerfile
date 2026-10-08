@@ -43,3 +43,5 @@ ENTRYPOINT ["java", "-jar", "app.jar"]
 # - VERIFICATION_TOKEN_EXPIRATION_HOURS: How long a verification link works (default 24).
 # - STAFF_{FIELD_AGENT,CATALOG_ADMIN,FINANCE_ADMIN}_EMAIL and ..._PASSWORD_HASH: The initial staff
 #   accounts (BCrypt hashes), inserted by the first startup on an empty database.
+# - STORAGE_S3_BUCKET: The S3 bucket for vouchers. STORAGE_S3_REGION defaults to sa-east-1; credentials come
+#   from the IAM role unless STORAGE_S3_ACCESS_KEY/SECRET_KEY are set.

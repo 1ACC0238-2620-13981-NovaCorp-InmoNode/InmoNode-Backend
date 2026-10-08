@@ -1,11 +1,15 @@
 package com.novacorp.inmonode.inmonodebackend.financial.domain.model.aggregates;
 
+import com.novacorp.inmonode.inmonodebackend.financial.domain.model.entities.PaymentEvidence;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.Money;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.ReservationChannel;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.ReservationStatus;
 import org.jspecify.annotations.Nullable;
 
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -14,6 +18,8 @@ import java.util.UUID;
  * <p>A field reservation keeps the ids generated on the device: {@code sourceEventId} identifies the
  * reservation itself, so a re-sent one is recognized, and {@code prospectId} the prospect it was made for,
  * who lives in the field context.</p>
+ *
+ * <p>It keeps the {@link PaymentEvidence payment evidences} it received, which the back office verifies.</p>
  */
 public class Reservation {
 
@@ -26,10 +32,11 @@ public class Reservation {
     private final Money initialAmount;
     private final Instant reservedAt;
     private ReservationStatus status;
+    private final List<PaymentEvidence> evidences;
 
     private Reservation(@Nullable Long id, Long lotId, ReservationChannel channel, Long requesterId,
                         @Nullable UUID prospectId, @Nullable UUID sourceEventId, Money initialAmount,
-                        Instant reservedAt, ReservationStatus status) {
+                        Instant reservedAt, ReservationStatus status, List<PaymentEvidence> evidences) {
         this.id = id;
         this.lotId = lotId;
         this.channel = channel;
@@ -39,6 +46,7 @@ public class Reservation {
         this.initialAmount = initialAmount;
         this.reservedAt = reservedAt;
         this.status = status;
+        this.evidences = new ArrayList<>(evidences);
     }
 
     /**
@@ -62,12 +70,13 @@ public class Reservation {
                 ReservationStatus.CANCELLED_BY_CONFLICT);
     }
 
-    /** Rebuilds an already persisted reservation. */
+    /** Rebuilds an already persisted reservation, with the payment evidences it received. */
     public static Reservation restore(Long id, Long lotId, ReservationChannel channel, Long requesterId,
                                       @Nullable UUID prospectId, @Nullable UUID sourceEventId, Money initialAmount,
-                                      Instant reservedAt, ReservationStatus status) {
+                                      Instant reservedAt, ReservationStatus status,
+                                      List<PaymentEvidence> evidences) {
         return new Reservation(id, lotId, channel, requesterId, prospectId, sourceEventId, initialAmount,
-                reservedAt, status);
+                reservedAt, status, evidences);
     }
 
     private static Reservation field(Long lotId, Long agentId, UUID prospectId, UUID sourceEventId,
@@ -77,7 +86,7 @@ public class Reservation {
             throw new IllegalArgumentException("a field reservation needs its lot, agent, prospect, id, amount and date");
         }
         return new Reservation(null, lotId, ReservationChannel.FIELD, agentId, prospectId, sourceEventId,
-                initialAmount, reservedAt, status);
+                initialAmount, reservedAt, status, List.of());
     }
 
     /**
@@ -93,6 +102,33 @@ public class Reservation {
         return true;
     }
 
+    /**
+     * Receives a payment evidence (2.6.4.1). While the reservation holds its lot ({@code BLOCKED}) the evidence is on
+     * time and the reservation waits for verification ({@code PENDING_VERIFICATION}); the caller moves the lot along.
+     * When it no longer holds it (expired or lost in a conflict) the evidence is kept as late for the back office and
+     * the reservation stays as it is. Any other evidence is kept as one more for the same verification.
+     *
+     * @return whether the reservation moved to {@code PENDING_VERIFICATION}
+     * @throws IllegalStateException when an evidence with the same reference was already received
+     */
+    public boolean attachEvidence(PaymentEvidence evidence) {
+        if (findEvidence(evidence.getReference()).isPresent()) {
+            throw new IllegalStateException("payment evidence %s was already received".formatted(evidence.getReference()));
+        }
+        if (status == ReservationStatus.BLOCKED) {
+            evidences.add(evidence);
+            status = ReservationStatus.PENDING_VERIFICATION;
+            return true;
+        }
+        var heldNoLot = status == ReservationStatus.EXPIRED || status == ReservationStatus.CANCELLED_BY_CONFLICT;
+        evidences.add(heldNoLot ? evidence.markedLate() : evidence);
+        return false;
+    }
+
+    public Optional<PaymentEvidence> findEvidence(UUID reference) {
+        return evidences.stream().filter(evidence -> evidence.getReference().equals(reference)).findFirst();
+    }
+
     public boolean isCancelledByConflict() {
         return status == ReservationStatus.CANCELLED_BY_CONFLICT;
     }
@@ -106,4 +142,5 @@ public class Reservation {
     public Money getInitialAmount() { return initialAmount; }
     public Instant getReservedAt() { return reservedAt; }
     public ReservationStatus getStatus() { return status; }
+    public List<PaymentEvidence> getEvidences() { return List.copyOf(evidences); }
 }

@@ -19,12 +19,13 @@ public class ReservationRepositoryImpl implements ReservationRepository {
         this.jpaRepository = jpaRepository;
     }
 
+    /** Flushed, so the evidences added to the reservation come back with their generated ids too. */
     @Override
     public Reservation save(Reservation reservation) {
         var entity = reservation.getId() == null
                 ? new ReservationEntity()
                 : jpaRepository.findById(reservation.getId()).orElseGet(ReservationEntity::new);
-        var saved = jpaRepository.save(ReservationEntityAssembler.copyToEntity(reservation, entity));
+        var saved = jpaRepository.saveAndFlush(ReservationEntityAssembler.copyToEntity(reservation, entity));
         return ReservationEntityAssembler.toDomain(saved);
     }
 
