@@ -11,6 +11,7 @@ import lombok.Getter;
 import lombok.Setter;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 
 /**
  * The project is referenced by id, not by association: {@code Project} and {@code Lot} are separate aggregates.
@@ -48,4 +49,8 @@ public class LotEntity extends AuditableAbstractPersistenceEntity {
 
     @Column(nullable = false, columnDefinition = "text")
     private String boundaryWkt;
+
+    private Long currentReservationId;
+
+    private Instant blockedUntil;
 }

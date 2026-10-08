@@ -11,9 +11,11 @@ import com.novacorp.inmonode.inmonodebackend.financial.infrastructure.persistenc
 import com.novacorp.inmonode.inmonodebackend.financial.infrastructure.persistence.jpa.repositories.LotJpaRepository.LotStatisticsView;
 import org.springframework.stereotype.Repository;
 
+import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -34,6 +36,21 @@ public class LotRepositoryImpl implements LotRepository {
                         : jpaRepository.findById(lot.getId()).orElseGet(LotEntity::new)))
                 .toList();
         return jpaRepository.saveAll(entities).stream().map(LotEntityAssembler::toDomain).toList();
+    }
+
+    @Override
+    public Lot save(Lot lot) {
+        return saveAll(List.of(lot)).getFirst();
+    }
+
+    @Override
+    public Optional<Lot> findByIdForUpdate(Long id) {
+        return jpaRepository.findByIdForUpdate(id).map(LotEntityAssembler::toDomain);
+    }
+
+    @Override
+    public List<Long> findIdsWithExpiredBlock(Instant now) {
+        return jpaRepository.findIdsWithExpiredBlock(LotStatus.BLOCKED, now);
     }
 
     @Override
