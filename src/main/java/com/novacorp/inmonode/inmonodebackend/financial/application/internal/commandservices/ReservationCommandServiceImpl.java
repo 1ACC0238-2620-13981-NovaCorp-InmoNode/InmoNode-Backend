@@ -3,6 +3,7 @@ package com.novacorp.inmonode.inmonodebackend.financial.application.internal.com
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.aggregates.Lot;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.aggregates.Reservation;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.commands.ConsolidateFieldReservationCommand;
+import com.novacorp.inmonode.inmonodebackend.financial.domain.model.commands.ReleaseExpiredLotBlocksCommand;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.FieldReservationOutcome;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.FieldReservationOutcome.ConflictReason;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.ReservationChannel;
@@ -50,7 +51,7 @@ public class ReservationCommandServiceImpl implements ReservationCommandService 
         }
         // PostgreSQL keeps microseconds: the block answered now must equal the one a re-send reads back.
         var now = clock.instant().truncatedTo(ChronoUnit.MICROS);
-        expirePreviousBlock(lot, now);
+        releaseExpiredBlock(lot, now);
         if (!lot.isAvailable(now)) {
             var conflicted = reservationRepository.save(Reservation.cancelledByConflict(command.lotId(),
                     command.agentId(), command.prospectId(), command.sourceEventId(), command.initialAmount(),
@@ -64,14 +65,40 @@ public class ReservationCommandServiceImpl implements ReservationCommandService 
         return FieldReservationOutcome.synced(reservation, Objects.requireNonNull(blocked.getBlockedUntil()));
     }
 
-    /** A block that ran out without payment evidence frees the lot and expires the reservation that held it. */
-    private void expirePreviousBlock(Lot lot, Instant now) {
-        lot.releaseExpiredBlock(now)
+    /**
+     * Each lot is read again under lock: a consolidation may have taken it since it was listed, and then it is no
+     * longer expired.
+     */
+    @Override
+    @Transactional
+    public int handle(ReleaseExpiredLotBlocksCommand command) {
+        var now = clock.instant().truncatedTo(ChronoUnit.MICROS);
+        var released = 0;
+        for (var lotId : lotRepository.findIdsWithExpiredBlock(now)) {
+            var lot = lotRepository.findByIdForUpdate(lotId).orElse(null);
+            if (lot != null && releaseExpiredBlock(lot, now)) {
+                lotRepository.save(lot);
+                released++;
+            }
+        }
+        return released;
+    }
+
+    /**
+     * A block that ran out without payment evidence frees the lot and expires the reservation that held it.
+     * The caller saves the lot.
+     *
+     * @return whether the lot had an expired block
+     */
+    private boolean releaseExpiredBlock(Lot lot, Instant now) {
+        var previousReservationId = lot.releaseExpiredBlock(now);
+        previousReservationId
                 .flatMap(reservationRepository::findById)
                 .ifPresent(previous -> {
                     if (previous.expire()) {
                         reservationRepository.save(previous);
                     }
                 });
+        return previousReservationId.isPresent();
     }
 }

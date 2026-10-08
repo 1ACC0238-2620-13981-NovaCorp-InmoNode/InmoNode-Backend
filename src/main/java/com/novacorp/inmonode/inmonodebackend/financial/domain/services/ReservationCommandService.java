@@ -1,6 +1,7 @@
 package com.novacorp.inmonode.inmonodebackend.financial.domain.services;
 
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.commands.ConsolidateFieldReservationCommand;
+import com.novacorp.inmonode.inmonodebackend.financial.domain.model.commands.ReleaseExpiredLotBlocksCommand;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.FieldReservationOutcome;
 
 /**
@@ -13,4 +14,12 @@ public interface ReservationCommandService {
      * the server takes the lot; a later one is kept as a conflict; a re-send is answered as a duplicate.
      */
     FieldReservationOutcome handle(ConsolidateFieldReservationCommand command);
+
+    /**
+     * Releases the expired lot blocks; run periodically. A block that ran out already counts as available, so this
+     * only brings the stored status (catalog, portfolio) up to date.
+     *
+     * @return how many lots were released
+     */
+    int handle(ReleaseExpiredLotBlocksCommand command);
 }

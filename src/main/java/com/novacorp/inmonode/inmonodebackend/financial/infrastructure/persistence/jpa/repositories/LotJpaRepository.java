@@ -31,8 +31,8 @@ public interface LotJpaRepository extends JpaRepository<LotEntity, Long> {
     @Query("select l from LotEntity l where l.id = :id")
     Optional<LotEntity> findByIdForUpdate(@Param("id") Long id);
 
-    @Query("select l from LotEntity l where l.status = :blocked and l.blockedUntil <= :now")
-    List<LotEntity> findExpiredBlocks(@Param("blocked") LotStatus blocked, @Param("now") Instant now);
+    @Query("select l.id from LotEntity l where l.status = :blocked and l.blockedUntil <= :now order by l.id")
+    List<Long> findIdsWithExpiredBlock(@Param("blocked") LotStatus blocked, @Param("now") Instant now);
 
     @Query("""
             select l.projectId as projectId,

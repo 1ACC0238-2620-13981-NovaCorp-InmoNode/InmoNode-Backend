@@ -87,7 +87,7 @@ class ReservationPersistenceIntegrationTest {
         block(expiredLot.getId(), reserve(expiredLot), now.minus(Duration.ofHours(25)));
         block(activeLot.getId(), reserve(activeLot), now);
 
-        var expiredIds = lotRepository.findWithExpiredBlock(now).stream().map(Lot::getId).toList();
+        var expiredIds = lotRepository.findIdsWithExpiredBlock(now);
 
         assertTrue(expiredIds.contains(expiredLot.getId()));
         assertFalse(expiredIds.contains(activeLot.getId()));

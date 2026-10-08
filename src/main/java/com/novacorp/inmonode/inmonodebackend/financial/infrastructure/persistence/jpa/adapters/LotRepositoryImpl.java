@@ -49,10 +49,8 @@ public class LotRepositoryImpl implements LotRepository {
     }
 
     @Override
-    public List<Lot> findWithExpiredBlock(Instant now) {
-        return jpaRepository.findExpiredBlocks(LotStatus.BLOCKED, now).stream()
-                .map(LotEntityAssembler::toDomain)
-                .toList();
+    public List<Long> findIdsWithExpiredBlock(Instant now) {
+        return jpaRepository.findIdsWithExpiredBlock(LotStatus.BLOCKED, now);
     }
 
     @Override

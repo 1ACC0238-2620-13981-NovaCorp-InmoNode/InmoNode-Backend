@@ -28,8 +28,11 @@ public interface LotRepository {
      */
     Optional<Lot> findByIdForUpdate(Long id);
 
-    /** Lots whose block ran out at {@code now}, still waiting to be released. */
-    List<Lot> findWithExpiredBlock(Instant now);
+    /**
+     * Ids of the lots whose block ran out at {@code now}, still waiting to be released. Only ids: each lot is then
+     * read under lock, so its state is current and not the one loaded with the list.
+     */
+    List<Long> findIdsWithExpiredBlock(Instant now);
 
     /** Codes already used in the project, to reject duplicates before saving. */
     Set<String> findCodesByProjectId(Long projectId);
