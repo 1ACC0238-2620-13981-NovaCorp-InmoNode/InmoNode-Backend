@@ -7,6 +7,7 @@ import com.novacorp.inmonode.inmonodebackend.iam.domain.model.aggregates.Refresh
 import com.novacorp.inmonode.inmonodebackend.iam.domain.model.aggregates.User;
 import com.novacorp.inmonode.inmonodebackend.iam.domain.model.commands.RefreshTokenCommand;
 import com.novacorp.inmonode.inmonodebackend.iam.domain.model.commands.RegisterUserCommand;
+import com.novacorp.inmonode.inmonodebackend.iam.domain.model.commands.ResendVerificationEmailCommand;
 import com.novacorp.inmonode.inmonodebackend.iam.domain.model.commands.SignInCommand;
 import com.novacorp.inmonode.inmonodebackend.iam.domain.model.commands.SignOutCommand;
 import com.novacorp.inmonode.inmonodebackend.iam.domain.model.commands.VerifyEmailCommand;
@@ -40,12 +41,15 @@ public class AuthCommandServiceImpl implements AuthCommandService {
     private final TokenService tokenService;
     private final RefreshTokenGenerator refreshTokenGenerator;
     private final Duration refreshTokenTimeToLive;
+    private final Duration verificationResendCooldown;
     private final Clock clock;
 
     public AuthCommandServiceImpl(UserRepository userRepository, RefreshTokenRepository refreshTokenRepository,
                                   HashingService hashingService, TokenService tokenService,
                                   RefreshTokenGenerator refreshTokenGenerator,
                                   @Value("${authorization.refresh-token.expiration-days:30}") long refreshTokenDays,
+                                  @Value("${authorization.verification.resend-cooldown-seconds:60}")
+                                  long verificationResendCooldownSeconds,
                                   Clock clock) {
         this.userRepository = userRepository;
         this.refreshTokenRepository = refreshTokenRepository;
@@ -53,6 +57,7 @@ public class AuthCommandServiceImpl implements AuthCommandService {
         this.tokenService = tokenService;
         this.refreshTokenGenerator = refreshTokenGenerator;
         this.refreshTokenTimeToLive = Duration.ofDays(refreshTokenDays);
+        this.verificationResendCooldown = Duration.ofSeconds(verificationResendCooldownSeconds);
         this.clock = clock;
     }
 
@@ -102,6 +107,15 @@ public class AuthCommandServiceImpl implements AuthCommandService {
                     "The verification token is invalid or was already used"));
         }
         return Result.success(userRepository.save(user));
+    }
+
+    @Override
+    @Transactional
+    public void handle(ResendVerificationEmailCommand command) {
+        var now = clock.instant();
+        userRepository.findByEmail(User.normalize(command.email()))
+                .filter(user -> user.renewVerificationToken(now, verificationResendCooldown))
+                .ifPresent(userRepository::save);
     }
 
     @Override

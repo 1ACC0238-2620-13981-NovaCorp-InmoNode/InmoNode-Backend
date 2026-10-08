@@ -3,6 +3,7 @@ package com.novacorp.inmonode.inmonodebackend.iam.domain.services;
 import com.novacorp.inmonode.inmonodebackend.iam.domain.model.aggregates.User;
 import com.novacorp.inmonode.inmonodebackend.iam.domain.model.commands.RefreshTokenCommand;
 import com.novacorp.inmonode.inmonodebackend.iam.domain.model.commands.RegisterUserCommand;
+import com.novacorp.inmonode.inmonodebackend.iam.domain.model.commands.ResendVerificationEmailCommand;
 import com.novacorp.inmonode.inmonodebackend.iam.domain.model.commands.SignInCommand;
 import com.novacorp.inmonode.inmonodebackend.iam.domain.model.commands.SignOutCommand;
 import com.novacorp.inmonode.inmonodebackend.iam.domain.model.commands.VerifyEmailCommand;
@@ -23,6 +24,13 @@ public interface AuthCommandService {
 
     /** US-14: activates the account that owns the verification token. */
     Result<User, ApplicationError> handle(VerifyEmailCommand command);
+
+    /**
+     * US-14: emails a new verification link to an account still pending verification. Silent: an
+     * unknown email, an active account or a request within the cooldown does nothing, so the outcome
+     * reveals nothing about the account.
+     */
+    void handle(ResendVerificationEmailCommand command);
 
     /**
      * Rotates the refresh token: the presented one is revoked and a new pair is issued. Presenting a

@@ -2,6 +2,7 @@ package com.novacorp.inmonode.inmonodebackend.iam.domain.model.aggregates;
 
 import com.novacorp.inmonode.inmonodebackend.iam.domain.model.events.AccountLockedEvent;
 import com.novacorp.inmonode.inmonodebackend.iam.domain.model.events.UserRegisteredEvent;
+import com.novacorp.inmonode.inmonodebackend.iam.domain.model.events.VerificationTokenRenewedEvent;
 import com.novacorp.inmonode.inmonodebackend.iam.domain.model.valueobjects.Role;
 import com.novacorp.inmonode.inmonodebackend.iam.domain.model.valueobjects.UserStatus;
 import com.novacorp.inmonode.inmonodebackend.shared.domain.model.aggregates.AbstractDomainAggregateRoot;
@@ -85,6 +86,24 @@ public class User extends AbstractDomainAggregateRoot<User> {
         }
         status = UserStatus.ACTIVE;
         verificationToken = null;
+        return true;
+    }
+
+    /**
+     * Replaces the verification token of an account that is still {@code INACTIVE}, so a lost or failed
+     * email can be sent again; the previous token stops working. Ignored for active accounts and while
+     * the previous email was sent less than {@code cooldown} ago, which keeps the endpoint from being
+     * used to flood a mailbox.
+     *
+     * @return {@code true} if a new token was issued and a new email must be sent
+     */
+    public boolean renewVerificationToken(Instant now, Duration cooldown) {
+        if (isActive() || (verificationSentAt != null && now.isBefore(verificationSentAt.plus(cooldown)))) {
+            return false;
+        }
+        verificationToken = newVerificationToken();
+        verificationSentAt = now;
+        registerDomainEvent(new VerificationTokenRenewedEvent(email, verificationToken));
         return true;
     }
 

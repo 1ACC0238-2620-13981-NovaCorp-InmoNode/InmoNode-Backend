@@ -7,6 +7,7 @@ import com.novacorp.inmonode.inmonodebackend.iam.domain.model.aggregates.Refresh
 import com.novacorp.inmonode.inmonodebackend.iam.domain.model.aggregates.User;
 import com.novacorp.inmonode.inmonodebackend.iam.domain.model.commands.RefreshTokenCommand;
 import com.novacorp.inmonode.inmonodebackend.iam.domain.model.commands.RegisterUserCommand;
+import com.novacorp.inmonode.inmonodebackend.iam.domain.model.commands.ResendVerificationEmailCommand;
 import com.novacorp.inmonode.inmonodebackend.iam.domain.model.commands.SignInCommand;
 import com.novacorp.inmonode.inmonodebackend.iam.domain.model.commands.SignOutCommand;
 import com.novacorp.inmonode.inmonodebackend.iam.domain.model.commands.VerifyEmailCommand;
@@ -38,6 +39,7 @@ class AuthCommandServiceImplTest {
 
     private static final Instant NOW = Instant.parse("2026-10-07T10:00:00Z");
     private static final long REFRESH_DAYS = 30;
+    private static final long RESEND_COOLDOWN_SECONDS = 60;
 
     private final Map<String, User> users = new HashMap<>();
     private final Map<String, RefreshToken> refreshTokens = new HashMap<>();
@@ -83,7 +85,7 @@ class AuthCommandServiceImplTest {
         when(generator.generate()).thenAnswer(i -> "rt-" + generatedTokens.incrementAndGet());
         when(generator.hash(any())).thenAnswer(i -> "sha:" + i.getArgument(0));
         service = new AuthCommandServiceImpl(repository, refreshTokenRepository, hashing, tokens, generator,
-                REFRESH_DAYS, Clock.fixed(NOW, ZoneOffset.UTC));
+                REFRESH_DAYS, RESEND_COOLDOWN_SECONDS, Clock.fixed(NOW, ZoneOffset.UTC));
     }
 
     @Test
@@ -159,6 +161,32 @@ class AuthCommandServiceImplTest {
 
         assertEquals(UserStatus.ACTIVE, ((Result.Success<User, ApplicationError>) first).value().getStatus());
         assertEquals("VALIDATION_ERROR", failure(second).code());
+    }
+
+    @Test
+    void resendRenewsTheTokenOfAPendingAccountOnceTheCooldownHasPassed() {
+        users.put("ana@mail.com", pendingUser(1L, "ana@mail.com", NOW.minusSeconds(RESEND_COOLDOWN_SECONDS)));
+
+        service.handle(new ResendVerificationEmailCommand("  ANA@mail.com "));
+
+        var user = users.get("ana@mail.com");
+        assertNotEquals("old-token", user.getVerificationToken());
+        assertEquals(NOW, user.getVerificationSentAt());
+        verify(repository).save(user);
+    }
+
+    @Test
+    void resendDoesNothingForUnknownEmailsActiveAccountsOrWithinTheCooldown() {
+        users.put("ana@mail.com", pendingUser(1L, "ana@mail.com", NOW.minusSeconds(RESEND_COOLDOWN_SECONDS - 1)));
+        users.put("bob@mail.com",
+                User.restore(2L, "bob@mail.com", "hash", Role.BUYER, UserStatus.ACTIVE, null, null, 0, null));
+
+        service.handle(new ResendVerificationEmailCommand("ana@mail.com"));
+        service.handle(new ResendVerificationEmailCommand("bob@mail.com"));
+        service.handle(new ResendVerificationEmailCommand("nobody@mail.com"));
+
+        assertEquals("old-token", users.get("ana@mail.com").getVerificationToken());
+        verify(repository, never()).save(any());
     }
 
     @Test
@@ -239,6 +267,11 @@ class AuthCommandServiceImplTest {
 
     private static User user(UserStatus status) {
         return User.restore(1L, "ana@mail.com", "hash:secret123", Role.BUYER, status, null, null, 0, null);
+    }
+
+    /** An account still pending verification, holding "old-token" emailed at {@code sentAt}. */
+    private static User pendingUser(Long id, String email, Instant sentAt) {
+        return User.restore(id, email, "hash", Role.BUYER, UserStatus.INACTIVE, "old-token", sentAt, 0, null);
     }
 
     private static <T> T success(Result<T, ApplicationError> result) {

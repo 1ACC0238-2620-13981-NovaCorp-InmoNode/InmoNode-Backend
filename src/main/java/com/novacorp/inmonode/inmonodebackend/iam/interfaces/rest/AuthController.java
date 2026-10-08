@@ -2,12 +2,14 @@ package com.novacorp.inmonode.inmonodebackend.iam.interfaces.rest;
 
 import com.novacorp.inmonode.inmonodebackend.iam.domain.model.commands.RefreshTokenCommand;
 import com.novacorp.inmonode.inmonodebackend.iam.domain.model.commands.RegisterUserCommand;
+import com.novacorp.inmonode.inmonodebackend.iam.domain.model.commands.ResendVerificationEmailCommand;
 import com.novacorp.inmonode.inmonodebackend.iam.domain.model.commands.SignInCommand;
 import com.novacorp.inmonode.inmonodebackend.iam.domain.model.commands.SignOutCommand;
 import com.novacorp.inmonode.inmonodebackend.iam.domain.model.commands.VerifyEmailCommand;
 import com.novacorp.inmonode.inmonodebackend.iam.domain.services.AuthCommandService;
 import com.novacorp.inmonode.inmonodebackend.iam.interfaces.rest.resources.RefreshTokenResource;
 import com.novacorp.inmonode.inmonodebackend.iam.interfaces.rest.resources.RegisterUserResource;
+import com.novacorp.inmonode.inmonodebackend.iam.interfaces.rest.resources.ResendVerificationResource;
 import com.novacorp.inmonode.inmonodebackend.iam.interfaces.rest.resources.SignInResource;
 import com.novacorp.inmonode.inmonodebackend.iam.interfaces.rest.resources.VerifyEmailResource;
 import com.novacorp.inmonode.inmonodebackend.iam.interfaces.rest.transform.TokenResourceAssembler;
@@ -48,6 +50,16 @@ public class AuthController {
         var result = authCommandService.handle(new SignInCommand(resource.email(), resource.password()));
         return ResponseEntityAssembler.toResponseEntityFromResult(
                 result, TokenResourceAssembler::toResourceFromAuthTokens, HttpStatus.OK);
+    }
+
+    @PostMapping("/resend-verification")
+    @Operation(summary = "Email a new verification link (US-14)",
+            description = "Always 204, whether or not the email belongs to an account pending verification, "
+                    + "so the response reveals nothing. The previous link stops working. Requests for the same "
+                    + "email within the cooldown (60 s by default) send nothing.")
+    public ResponseEntity<Void> resendVerification(@Valid @RequestBody ResendVerificationResource resource) {
+        authCommandService.handle(new ResendVerificationEmailCommand(resource.email()));
+        return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/refresh")

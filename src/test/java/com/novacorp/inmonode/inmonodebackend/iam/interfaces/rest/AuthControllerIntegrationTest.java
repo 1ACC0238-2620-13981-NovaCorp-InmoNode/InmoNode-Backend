@@ -19,7 +19,10 @@ import org.springframework.test.web.servlet.ResultActions;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -165,6 +168,43 @@ class AuthControllerIntegrationTest {
     }
 
     @Test
+    void resendVerificationEmailsANewLinkAndTheOldOneStopsWorking() throws Exception {
+        var email = uniqueEmail();
+        register(email).andExpect(status().isCreated());
+
+        resendVerification(email).andExpect(status().isNoContent());
+
+        var tokens = ArgumentCaptor.forClass(String.class);
+        verify(verificationEmailSender, times(2)).send(eq(email), tokens.capture());
+        var first = tokens.getAllValues().get(0);
+        var second = tokens.getAllValues().get(1);
+        assertNotEquals(first, second);
+        verifyEmail(first)
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+        verifyEmail(second)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("ACTIVE"));
+    }
+
+    @Test
+    void resendVerificationRevealsNothingAndSendsOnlyForPendingAccounts() throws Exception {
+        var active = uniqueEmail();
+        register(active).andExpect(status().isCreated());
+        verifyEmail(capturedVerificationToken(active)).andExpect(status().isOk());
+        var unknown = uniqueEmail();
+
+        resendVerification(active).andExpect(status().isNoContent());
+        resendVerification(unknown).andExpect(status().isNoContent());
+        resendVerification("not-an-email")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+
+        verify(verificationEmailSender, times(1)).send(eq(active), anyString());
+        verify(verificationEmailSender, never()).send(eq(unknown), anyString());
+    }
+
+    @Test
     void fifthWrongPasswordLocksTheAccount() throws Exception {
         var email = uniqueEmail();
         register(email).andExpect(status().isCreated());
@@ -196,6 +236,11 @@ class AuthControllerIntegrationTest {
     private ResultActions verifyEmail(String token) throws Exception {
         return postJson("/api/v1/auth/verify-email", """
                 {"token": "%s"}""".formatted(token));
+    }
+
+    private ResultActions resendVerification(String email) throws Exception {
+        return postJson("/api/v1/auth/resend-verification", """
+                {"email": "%s"}""".formatted(email));
     }
 
     private ResultActions refresh(String refreshToken) throws Exception {
