@@ -11,4 +11,6 @@ public interface LotJpaRepository extends JpaRepository<LotEntity, Long> {
 
     @Query("select l.code from LotEntity l where l.projectId = :projectId")
     Set<String> findCodesByProjectId(@Param("projectId") Long projectId);
+
+    long countByProjectId(Long projectId);
 }

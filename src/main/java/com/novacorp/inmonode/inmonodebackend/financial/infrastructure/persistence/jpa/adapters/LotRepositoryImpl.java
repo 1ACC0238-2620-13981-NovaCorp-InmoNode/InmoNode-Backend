@@ -33,4 +33,9 @@ public class LotRepositoryImpl implements LotRepository {
     public Set<String> findCodesByProjectId(Long projectId) {
         return jpaRepository.findCodesByProjectId(projectId);
     }
+
+    @Override
+    public long countByProjectId(Long projectId) {
+        return jpaRepository.countByProjectId(projectId);
+    }
 }

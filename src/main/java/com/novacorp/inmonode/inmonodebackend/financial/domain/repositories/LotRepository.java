@@ -17,4 +17,6 @@ public interface LotRepository {
 
     /** Codes already used in the project, to reject duplicates before saving. */
     Set<String> findCodesByProjectId(Long projectId);
+
+    long countByProjectId(Long projectId);
 }

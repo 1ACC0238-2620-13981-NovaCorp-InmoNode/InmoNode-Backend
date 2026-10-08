@@ -28,6 +28,24 @@ class ProjectTest {
     }
 
     @Test
+    void projectWithoutLotsCannotBePublished() {
+        var project = Project.create("Los Pinos", "Chilca", null, null, RULES);
+
+        assertFalse(project.publish(0));
+        assertEquals(ProjectStatus.DRAFT, project.getStatus());
+    }
+
+    @Test
+    void projectWithLotsIsPublishedAndPublishingAgainChangesNothing() {
+        var project = Project.create("Los Pinos", "Chilca", null, null, RULES);
+
+        assertTrue(project.publish(3));
+        assertTrue(project.isPublished());
+        assertTrue(project.publish(3));
+        assertEquals(ProjectStatus.PUBLISHED, project.getStatus());
+    }
+
+    @Test
     void nameLocationAndFinancingRulesAreRequired() {
         assertThrows(IllegalArgumentException.class, () -> Project.create(" ", "Chilca", null, null, RULES));
         assertThrows(IllegalArgumentException.class, () -> Project.create("Los Pinos", "", null, null, RULES));

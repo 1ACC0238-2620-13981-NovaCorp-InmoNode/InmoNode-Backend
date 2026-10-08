@@ -49,6 +49,21 @@ public class Project {
         return new Project(id, name, location, coordinates, coverImageUrl, financingRules, status);
     }
 
+    /**
+     * US-53, Scenario 1: a project becomes visible in the catalog only once it has at least one lot.
+     * Publishing an already published project changes nothing.
+     *
+     * @param lotCount lots currently loaded for this project
+     * @return {@code false} when the project has no lots and stays a draft
+     */
+    public boolean publish(long lotCount) {
+        if (lotCount <= 0) {
+            return false;
+        }
+        status = ProjectStatus.PUBLISHED;
+        return true;
+    }
+
     public boolean isPublished() {
         return status == ProjectStatus.PUBLISHED;
     }

@@ -1,5 +1,6 @@
 package com.novacorp.inmonode.inmonodebackend.financial.interfaces.rest;
 
+import com.novacorp.inmonode.inmonodebackend.financial.domain.model.commands.PublishProjectCommand;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.services.ProjectCommandService;
 import com.novacorp.inmonode.inmonodebackend.financial.interfaces.rest.resources.CreateProjectResource;
 import com.novacorp.inmonode.inmonodebackend.financial.interfaces.rest.transform.CreateProjectCommandFromResourceAssembler;
@@ -11,6 +12,7 @@ import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -36,5 +38,16 @@ public class ProjectsController {
                 CreateProjectCommandFromResourceAssembler.toCommandFromResource(resource));
         return ResponseEntityAssembler.toResponseEntityFromResult(
                 result, ProjectResourceAssembler::toResourceFromEntity, HttpStatus.CREATED);
+    }
+
+    @PostMapping("/{projectId}/publish")
+    @PreAuthorize("hasRole('CATALOG_ADMIN')")
+    @Operation(summary = "Publish a project in the catalog (US-53)",
+            description = "Back-office only (CATALOG_ADMIN). Requires at least one lot (422 otherwise). "
+                    + "Publishing an already published project returns it unchanged.")
+    public ResponseEntity<?> publish(@PathVariable Long projectId) {
+        var result = projectCommandService.handle(new PublishProjectCommand(projectId));
+        return ResponseEntityAssembler.toResponseEntityFromResult(
+                result, ProjectResourceAssembler::toResourceFromEntity, HttpStatus.OK);
     }
 }
