@@ -8,6 +8,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -63,6 +64,21 @@ class AuthControllerIntegrationTest {
         login(email, PASSWORD)
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("ACCOUNT_INACTIVE"));
+    }
+
+    @Test
+    void errorMessageFollowsAcceptLanguageWithoutMixingLanguages() throws Exception {
+        var email = uniqueEmail();
+        register(email).andExpect(status().isCreated());
+        var body = """
+                {"email": "%s", "password": "%s"}""".formatted(email, PASSWORD);
+
+        mockMvc.perform(post("/api/v1/auth/login").contentType(MediaType.APPLICATION_JSON).content(body)
+                        .header(HttpHeaders.ACCEPT_LANGUAGE, "es"))
+                .andExpect(jsonPath("$.message").value("Cuenta no activa: verifica tu correo antes de iniciar sesión"));
+        mockMvc.perform(post("/api/v1/auth/login").contentType(MediaType.APPLICATION_JSON).content(body)
+                        .header(HttpHeaders.ACCEPT_LANGUAGE, "en"))
+                .andExpect(jsonPath("$.message").value("Account not active: verify your email before signing in"));
     }
 
     @Test

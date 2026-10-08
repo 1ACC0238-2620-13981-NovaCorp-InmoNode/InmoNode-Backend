@@ -94,9 +94,12 @@ class WebSecurityConfigurationIntegrationTest {
 
     @Test
     void roleNotAdmittedByPreAuthorizeIsForbidden() throws Exception {
-        getWithBearer(CATALOG_ADMIN_PATH, tokenService.generateToken(BUYER))
+        mockMvc.perform(get(CATALOG_ADMIN_PATH)
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenService.generateToken(BUYER))
+                        .header(HttpHeaders.ACCEPT_LANGUAGE, "es"))
                 .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("FORBIDDEN"));
+                .andExpect(jsonPath("$.code").value("FORBIDDEN"))
+                .andExpect(jsonPath("$.message").value("No tienes permiso para realizar esta operación"));
     }
 
     @Test
