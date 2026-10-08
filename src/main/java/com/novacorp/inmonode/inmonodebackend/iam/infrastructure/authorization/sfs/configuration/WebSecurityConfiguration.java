@@ -6,6 +6,7 @@ import com.novacorp.inmonode.inmonodebackend.iam.infrastructure.authorization.sf
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -39,6 +40,15 @@ public class WebSecurityConfiguration {
             "/swagger-ui.html"
     };
 
+    /**
+     * Read-only endpoints open to visitors without a session: the published project catalog (US-15).
+     * Writes on the same paths stay protected by {@code @PreAuthorize}.
+     */
+    private static final String[] PUBLIC_READ_ENDPOINTS = {
+            "/api/v1/projects",
+            "/api/v1/projects/**"
+    };
+
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http, TokenService tokenService) throws Exception {
         return http
@@ -50,6 +60,7 @@ public class WebSecurityConfiguration {
                         .accessDeniedHandler(SecurityErrorHandlers.forbidden()))
                 .authorizeHttpRequests(requests -> requests
                         .requestMatchers(PUBLIC_ENDPOINTS).permitAll()
+                        .requestMatchers(HttpMethod.GET, PUBLIC_READ_ENDPOINTS).permitAll()
                         .anyRequest().authenticated())
                 .addFilterBefore(new JwtAuthenticationFilter(tokenService), UsernamePasswordAuthenticationFilter.class)
                 .build();

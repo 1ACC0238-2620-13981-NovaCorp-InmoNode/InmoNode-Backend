@@ -1,0 +1,27 @@
+package com.novacorp.inmonode.inmonodebackend.financial.domain.services;
+
+import com.novacorp.inmonode.inmonodebackend.financial.domain.model.aggregates.Lot;
+import com.novacorp.inmonode.inmonodebackend.financial.domain.model.aggregates.Project;
+import com.novacorp.inmonode.inmonodebackend.financial.domain.model.queries.GetProjectByIdQuery;
+import com.novacorp.inmonode.inmonodebackend.financial.domain.model.queries.GetProjectLotsQuery;
+import com.novacorp.inmonode.inmonodebackend.financial.domain.model.queries.GetPublishedProjectsQuery;
+import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.ProjectSummary;
+import com.novacorp.inmonode.inmonodebackend.shared.application.result.ApplicationError;
+import com.novacorp.inmonode.inmonodebackend.shared.application.result.Result;
+
+import java.util.List;
+
+/**
+ * Query side of the project catalog. Drafts are visible only to the catalog back-office; for anyone else
+ * they do not exist.
+ */
+public interface ProjectQueryService {
+
+    /** US-15: published projects with their price range and availability, ordered by name. */
+    List<ProjectSummary> handle(GetPublishedProjectsQuery query);
+
+    Result<Project, ApplicationError> handle(GetProjectByIdQuery query);
+
+    /** US-05, US-15: lots of a visible project, ordered by code. */
+    Result<List<Lot>, ApplicationError> handle(GetProjectLotsQuery query);
+}

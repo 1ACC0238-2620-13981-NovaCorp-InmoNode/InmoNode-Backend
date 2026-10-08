@@ -1,0 +1,40 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": { "code": "A-01", "area": 120.5, "front": 8, "depth": 15.06, "price": 45000 },
+      "geometry": { "type": "Polygon", "coordinates": [[[-76.7370, -12.5210], [-76.7369, -12.5210], [-76.7369, -12.5209], [-76.7370, -12.5209], [-76.7370, -12.5210]]] }
+    },
+    {
+      "type": "Feature",
+      "properties": { "code": "A-02", "area": 118, "price": 44000.5 },
+      "geometry": { "type": "Polygon", "coordinates": [[[-76.7369, -12.5210], [-76.7368, -12.5210], [-76.7368, -12.5209], [-76.7369, -12.5209], [-76.7369, -12.5210]]] }
+    },
+    {
+      "type": "Feature",
+      "properties": { "code": "A-03", "area": 125, "price": 47500 },
+      "geometry": { "type": "Polygon", "coordinates": [[[-76.7368, -12.5210], [-76.7367, -12.5210], [-76.7367, -12.5209], [-76.7368, -12.5209], [-76.7368, -12.5210]]] }
+    },
+    {
+      "type": "Feature",
+      "properties": { "code": "a-01", "area": 120, "price": 45000 },
+      "geometry": { "type": "Polygon", "coordinates": [[[-76.7367, -12.5210], [-76.7366, -12.5210], [-76.7366, -12.5209], [-76.7367, -12.5209], [-76.7367, -12.5210]]] }
+    },
+    {
+      "type": "Feature",
+      "properties": { "code": "A-05", "area": 120, "price": 45000 },
+      "geometry": { "type": "Polygon", "coordinates": [[[-76.7366, -12.5210], [-76.7365, -12.5209], [-76.7365, -12.5210], [-76.7366, -12.5209], [-76.7366, -12.5210]]] }
+    },
+    {
+      "type": "Feature",
+      "properties": { "code": "A-06", "area": 120 },
+      "geometry": { "type": "Polygon", "coordinates": [[[-76.7365, -12.5210], [-76.7364, -12.5210], [-76.7364, -12.5209], [-76.7365, -12.5209], [-76.7365, -12.5210]]] }
+    },
+    {
+      "type": "Feature",
+      "properties": { "code": "A-07", "area": 120, "price": 45000 },
+      "geometry": { "type": "Point", "coordinates": [-76.7363, -12.5209] }
+    }
+  ]
+}
