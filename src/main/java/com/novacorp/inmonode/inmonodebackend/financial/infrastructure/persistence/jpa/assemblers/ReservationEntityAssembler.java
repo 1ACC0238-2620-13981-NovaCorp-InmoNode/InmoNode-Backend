@@ -23,7 +23,8 @@ public final class ReservationEntityAssembler {
                 entity.getProspectId(), entity.getSourceEventId(),
                 new Money(entity.getInitialAmount(), entity.getInitialAmountCurrency()),
                 entity.getReservedAt(), entity.getStatus(),
-                entity.getEvidences().stream().map(ReservationEntityAssembler::toDomain).toList());
+                entity.getEvidences().stream().map(ReservationEntityAssembler::toDomain).toList(),
+                entity.getVerifiedAt());
     }
 
     /**
@@ -40,6 +41,7 @@ public final class ReservationEntityAssembler {
         entity.setInitialAmountCurrency(reservation.getInitialAmount().currency());
         entity.setStatus(reservation.getStatus());
         entity.setReservedAt(reservation.getReservedAt());
+        entity.setVerifiedAt(reservation.getVerifiedAt());
         copyEvidencesToEntity(reservation, entity);
         return entity;
     }
@@ -66,7 +68,8 @@ public final class ReservationEntityAssembler {
         return PaymentEvidence.restore(entity.getId(), entity.getReference(), entity.getSource(),
                 new Money(entity.getAmount(), entity.getCurrency()), entity.getOperationDate(),
                 entity.getOperationCode(), entity.isManuallyCorrected(), entity.getObjectKey(), entity.getStatus(),
-                entity.isLate(), entity.getSubmittedAt());
+                entity.isLate(), entity.getSubmittedAt(), entity.getReviewerId(), entity.getReviewerNote(),
+                entity.getReviewedAt());
     }
 
     private static void copyToEntity(PaymentEvidence evidence, PaymentEvidenceEntity entity) {
@@ -81,5 +84,8 @@ public final class ReservationEntityAssembler {
         entity.setStatus(evidence.getStatus());
         entity.setLate(evidence.isLate());
         entity.setSubmittedAt(evidence.getSubmittedAt());
+        entity.setReviewerId(evidence.getReviewerId());
+        entity.setReviewerNote(evidence.getReviewerNote());
+        entity.setReviewedAt(evidence.getReviewedAt());
     }
 }

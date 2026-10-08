@@ -1,12 +1,14 @@
 package com.novacorp.inmonode.inmonodebackend.financial.infrastructure.persistence.jpa.adapters;
 
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.aggregates.Reservation;
+import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.PaymentEvidenceStatus;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.repositories.ReservationRepository;
 import com.novacorp.inmonode.inmonodebackend.financial.infrastructure.persistence.jpa.assemblers.ReservationEntityAssembler;
 import com.novacorp.inmonode.inmonodebackend.financial.infrastructure.persistence.jpa.entities.ReservationEntity;
 import com.novacorp.inmonode.inmonodebackend.financial.infrastructure.persistence.jpa.repositories.ReservationJpaRepository;
 import org.springframework.stereotype.Repository;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -37,5 +39,17 @@ public class ReservationRepositoryImpl implements ReservationRepository {
     @Override
     public Optional<Reservation> findBySourceEventId(UUID sourceEventId) {
         return jpaRepository.findBySourceEventId(sourceEventId).map(ReservationEntityAssembler::toDomain);
+    }
+
+    @Override
+    public Optional<Reservation> findByEvidenceId(Long evidenceId) {
+        return jpaRepository.findByEvidenceId(evidenceId).map(ReservationEntityAssembler::toDomain);
+    }
+
+    @Override
+    public List<Reservation> findWithPendingEvidence() {
+        return jpaRepository.findWithEvidenceInStatus(PaymentEvidenceStatus.PENDING).stream()
+                .map(ReservationEntityAssembler::toDomain)
+                .toList();
     }
 }

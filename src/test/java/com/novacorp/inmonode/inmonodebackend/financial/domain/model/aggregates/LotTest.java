@@ -75,6 +75,39 @@ class LotTest {
     }
 
     @Test
+    void anApprovedVerificationReservesTheLotForItsReservation() {
+        var lot = newLot();
+        assertFalse(lot.markReserved(10L), "an available lot waits for no verification");
+        lot.block(10L, NOW, DAY);
+        assertFalse(lot.markReserved(10L), "a blocked lot is not yet under verification");
+        lot.moveToPendingVerification(10L, NOW);
+
+        assertFalse(lot.markReserved(11L), "another reservation");
+        assertTrue(lot.markReserved(10L));
+
+        assertEquals(LotStatus.RESERVED, lot.getStatus());
+        assertEquals(10L, lot.getCurrentReservationId());
+        assertFalse(lot.isAvailable(NOW.plus(DAY).plus(DAY)));
+    }
+
+    @Test
+    void aRejectedVerificationHoldsTheLotAgainForANewWindow() {
+        var lot = newLot();
+        lot.block(10L, NOW, DAY);
+        lot.moveToPendingVerification(10L, NOW);
+        var rejectedAt = NOW.plus(Duration.ofHours(30));
+
+        assertFalse(lot.reopenBlock(11L, rejectedAt, DAY));
+        assertTrue(lot.reopenBlock(10L, rejectedAt, Duration.ofHours(1)));
+
+        assertEquals(LotStatus.BLOCKED, lot.getStatus());
+        assertEquals(10L, lot.getCurrentReservationId());
+        assertEquals(rejectedAt.plus(Duration.ofHours(1)), lot.getBlockedUntil());
+        assertFalse(lot.isAvailable(rejectedAt));
+        assertTrue(lot.hasExpiredBlock(rejectedAt.plus(Duration.ofHours(1))), "it runs out as any block");
+    }
+
+    @Test
     void anActiveBlockMovesToPendingVerificationWithNoDeadline() {
         var lot = newLot();
         lot.block(10L, NOW, DAY);

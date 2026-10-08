@@ -1,9 +1,11 @@
 package com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects;
 
 /**
- * Verification of a payment evidence by the back office. Every evidence arrives {@code PENDING}; approving or
- * rejecting it belongs to the verification queue (US-55, US-56).
+ * Verification of a payment evidence by the back office. Every evidence arrives {@code PENDING}; the back office
+ * approves it, or rejects it with a reason so the requester can send a substitute (US-25).
  */
 public enum PaymentEvidenceStatus {
-    PENDING
+    PENDING,
+    APPROVED,
+    REJECTED
 }
