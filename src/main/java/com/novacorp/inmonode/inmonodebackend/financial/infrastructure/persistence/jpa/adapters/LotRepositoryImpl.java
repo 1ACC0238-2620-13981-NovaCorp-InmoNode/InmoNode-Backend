@@ -54,6 +54,16 @@ public class LotRepositoryImpl implements LotRepository {
     }
 
     @Override
+    public List<Lot> findByProjectIds(Collection<Long> projectIds) {
+        if (projectIds.isEmpty()) {
+            return List.of();
+        }
+        return jpaRepository.findByProjectIdInOrderByProjectIdAscCodeAsc(projectIds).stream()
+                .map(LotEntityAssembler::toDomain)
+                .toList();
+    }
+
+    @Override
     public Map<Long, LotStatistics> summarizeByProjectIds(Collection<Long> projectIds) {
         if (projectIds.isEmpty()) {
             return Map.of();

@@ -20,6 +20,8 @@ public interface LotJpaRepository extends JpaRepository<LotEntity, Long> {
 
     List<LotEntity> findByProjectIdOrderByCodeAsc(Long projectId);
 
+    List<LotEntity> findByProjectIdInOrderByProjectIdAscCodeAsc(Collection<Long> projectIds);
+
     @Query("""
             select l.projectId as projectId,
                    count(l) as totalLots,

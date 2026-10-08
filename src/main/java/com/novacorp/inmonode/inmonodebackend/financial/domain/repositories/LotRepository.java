@@ -26,6 +26,9 @@ public interface LotRepository {
     /** Lots of the project ordered by code. */
     List<Lot> findByProjectId(Long projectId);
 
+    /** Lots of several projects in one query, ordered by project and code. */
+    List<Lot> findByProjectIds(Collection<Long> projectIds);
+
     /**
      * Inventory figures per project, computed in the database. Projects without lots are absent from the map.
      */
