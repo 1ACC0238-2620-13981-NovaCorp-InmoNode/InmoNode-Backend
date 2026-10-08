@@ -24,9 +24,20 @@ public interface ObjectStorage {
     Optional<StoredObject> describe(String key);
 
     /**
+     * Signs a {@code GET} of the object under {@code key}, so a client reads it straight from the storage while the
+     * bucket stays private. Signing does not check the object exists; the storage answers 404 if it does not.
+     *
+     * @param validity how long the URL can be used
+     */
+    PresignedDownload presignDownload(String key, Duration validity);
+
+    /**
      * @param headers headers the client must send with the {@code PUT}, exactly as given
      */
     record PresignedUpload(URI url, Instant expiresAt, Map<String, String> headers) {
+    }
+
+    record PresignedDownload(URI url, Instant expiresAt) {
     }
 
     record StoredObject(long sizeBytes, String contentType) {
