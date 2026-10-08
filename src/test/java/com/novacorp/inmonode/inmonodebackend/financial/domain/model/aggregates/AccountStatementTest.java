@@ -161,6 +161,74 @@ class AccountStatementTest {
     }
 
     @Test
+    void anInstallmentFallsOverdueTheDayAfterItsDueDateWithASingleLateFee() {
+        var statement = AccountStatement.open(contract(5L), reservation(PLAN), NOW);
+        var lateFeeRate = new BigDecimal("1.5");
+
+        assertTrue(statement.markOverdueInstallments(LocalDate.parse("2026-11-08"), lateFeeRate).isEmpty(),
+                "it is due all of its due date");
+        var overdue = statement.markOverdueInstallments(LocalDate.parse("2026-11-09"), lateFeeRate);
+
+        assertEquals(List.of(1), overdue.stream().map(Installment::getNumber).toList());
+        var first = statement.findInstallment(1).orElseThrow();
+        assertEquals(InstallmentStatus.OVERDUE, first.getStatus());
+        assertEquals(new BigDecimal("47.98"), first.getPenalty());
+        assertEquals(new BigDecimal("3246.54"), first.amountDue());
+        assertEquals(new BigDecimal("38430.64"), statement.balance());
+        assertTrue(statement.markOverdueInstallments(LocalDate.parse("2026-11-20"), lateFeeRate).isEmpty(),
+                "the fee is charged once");
+        assertEquals(new BigDecimal("47.98"), first.getPenalty());
+    }
+
+    @Test
+    void severalInstallmentsCanFallOverdueAtOnceButNotThePaidOnes() {
+        var statement = AccountStatement.open(contract(5L), reservation(PLAN), NOW);
+        statement.registerInstallmentPayment(1, new BigDecimal("3198.56"), NOW);
+
+        var overdue = statement.markOverdueInstallments(LocalDate.parse("2027-01-10"), BigDecimal.ZERO);
+
+        assertEquals(List.of(2, 3), overdue.stream().map(Installment::getNumber).toList());
+        assertEquals(InstallmentStatus.PAID, statement.findInstallment(1).orElseThrow().getStatus());
+        assertEquals(new BigDecimal("0.00"), statement.findInstallment(2).orElseThrow().getPenalty(),
+                "a project without late fee");
+    }
+
+    @Test
+    void buyersAreRemindedOnceOfAnInstallmentDueWithinFiveDays() {
+        var statement = AccountStatement.open(contract(5L), reservation(PLAN), NOW);
+
+        assertTrue(statement.installmentsToRemind(LocalDate.parse("2026-11-02")).isEmpty());
+        assertEquals(List.of(1), statement.installmentsToRemind(LocalDate.parse("2026-11-03")).stream()
+                .map(Installment::getNumber).toList());
+        assertEquals(List.of(1), statement.installmentsToRemind(LocalDate.parse("2026-11-08")).stream()
+                .map(Installment::getNumber).toList(), "even on its due date");
+
+        statement.recordReminder(1, NOW);
+
+        assertEquals(NOW, statement.findInstallment(1).orElseThrow().getReminderSentAt());
+        assertTrue(statement.installmentsToRemind(LocalDate.parse("2026-11-05")).isEmpty());
+        statement.registerInstallmentPayment(2, new BigDecimal("3198.56"), NOW);
+        assertTrue(statement.installmentsToRemind(LocalDate.parse("2026-12-05")).isEmpty(), "paid already");
+    }
+
+    @Test
+    void buyersAreToldOnceOfAnOverdueInstallment() {
+        var statement = AccountStatement.open(contract(5L), reservation(PLAN), NOW);
+        assertTrue(statement.overdueInstallmentsToNotify().isEmpty());
+        statement.markOverdueInstallments(LocalDate.parse("2026-11-09"), new BigDecimal("1.5"));
+
+        assertEquals(List.of(1), statement.overdueInstallmentsToNotify().stream()
+                .map(Installment::getNumber).toList());
+        assertTrue(statement.installmentsToRemind(LocalDate.parse("2026-11-09")).isEmpty(),
+                "an overdue one gets a notice, not a reminder");
+        statement.recordOverdueNotice(1, NOW);
+
+        assertEquals(NOW, statement.findInstallment(1).orElseThrow().getOverdueNotifiedAt());
+        assertTrue(statement.overdueInstallmentsToNotify().isEmpty());
+        assertThrows(IllegalArgumentException.class, () -> statement.recordOverdueNotice(13, NOW));
+    }
+
+    @Test
     void theNextInstallmentIsDueSoonWithinFiveDaysOrWhenLate() {
         var statement = AccountStatement.open(contract(5L), reservation(PLAN), NOW);
 

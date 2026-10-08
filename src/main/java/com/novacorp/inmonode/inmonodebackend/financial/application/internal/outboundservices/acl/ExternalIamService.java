@@ -24,6 +24,11 @@ public class ExternalIamService {
         return iamContextFacade.currentUserId();
     }
 
+    /** Where to send a user the notices about their payments (US-24); empty when the user does not exist. */
+    public Optional<String> emailOf(Long userId) {
+        return iamContextFacade.fetchEmailByUserId(userId);
+    }
+
     /** Whether the caller manages the catalog, and may therefore see draft projects. */
     public boolean isCatalogAdmin() {
         return iamContextFacade.currentUserRole().filter(CATALOG_ADMIN::equals).isPresent();

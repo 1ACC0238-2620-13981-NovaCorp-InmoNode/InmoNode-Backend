@@ -15,6 +15,8 @@ import java.time.LocalDate;
  */
 public class Installment {
 
+    private static final BigDecimal ONE_HUNDRED = BigDecimal.valueOf(100);
+
     private final @Nullable Long id;
     private final int number;
     private final LocalDate dueDate;
@@ -74,6 +76,43 @@ public class Installment {
 
     public boolean isPaid() {
         return status == InstallmentStatus.PAID;
+    }
+
+    /**
+     * US-24, Scenario 2: once its due date has passed unpaid, it is overdue and carries a single late fee of
+     * {@code lateFeeRate} % of its amount.
+     *
+     * @param lateFeeRate percentage of the project (1.5 means 1.5 %)
+     * @return {@code true} when it has just fallen overdue
+     */
+    public boolean markOverdue(LocalDate asOfDate, BigDecimal lateFeeRate) {
+        if (status != InstallmentStatus.PENDING || !dueDate.isBefore(asOfDate)) {
+            return false;
+        }
+        status = InstallmentStatus.OVERDUE;
+        penalty = amount.multiply(lateFeeRate).divide(ONE_HUNDRED, 2, RoundingMode.HALF_UP);
+        return true;
+    }
+
+    /** US-24, Scenario 1: pending, due from {@code asOfDate} up to {@code days} later, and not reminded yet. */
+    public boolean needsReminder(LocalDate asOfDate, int days) {
+        return status == InstallmentStatus.PENDING && reminderSentAt == null
+                && !dueDate.isBefore(asOfDate) && !dueDate.isAfter(asOfDate.plusDays(days));
+    }
+
+    /** US-24, Scenario 2: overdue and its buyer not told yet. */
+    public boolean needsOverdueNotice() {
+        return status == InstallmentStatus.OVERDUE && overdueNotifiedAt == null;
+    }
+
+    /** Only its {@code AccountStatement} calls it. */
+    public void recordReminder(Instant sentAt) {
+        reminderSentAt = sentAt;
+    }
+
+    /** Only its {@code AccountStatement} calls it. */
+    public void recordOverdueNotice(Instant sentAt) {
+        overdueNotifiedAt = sentAt;
     }
 
     /** Whether {@code paid} is exactly what settles it: an installment is paid whole, with its late fee. */

@@ -1,12 +1,15 @@
 package com.novacorp.inmonode.inmonodebackend.financial.infrastructure.persistence.jpa.adapters;
 
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.aggregates.AccountStatement;
+import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.InstallmentStatus;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.repositories.AccountStatementRepository;
 import com.novacorp.inmonode.inmonodebackend.financial.infrastructure.persistence.jpa.assemblers.AccountStatementEntityAssembler;
 import com.novacorp.inmonode.inmonodebackend.financial.infrastructure.persistence.jpa.entities.AccountStatementEntity;
 import com.novacorp.inmonode.inmonodebackend.financial.infrastructure.persistence.jpa.repositories.AccountStatementJpaRepository;
 import org.springframework.stereotype.Repository;
 
+import java.time.LocalDate;
+import java.util.List;
 import java.util.Optional;
 
 @Repository
@@ -41,5 +44,11 @@ public class AccountStatementRepositoryImpl implements AccountStatementRepositor
     @Override
     public Optional<AccountStatement> findByReservationId(Long reservationId) {
         return jpaRepository.findByReservationId(reservationId).map(AccountStatementEntityAssembler::toDomain);
+    }
+
+    @Override
+    public List<Long> findIdsToReview(LocalDate asOfDate, int reminderDays) {
+        return jpaRepository.findIdsToReview(asOfDate, asOfDate.plusDays(reminderDays), InstallmentStatus.PENDING,
+                InstallmentStatus.OVERDUE);
     }
 }

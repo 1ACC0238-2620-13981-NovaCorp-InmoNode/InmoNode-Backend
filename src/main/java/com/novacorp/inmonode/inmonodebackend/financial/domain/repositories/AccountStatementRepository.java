@@ -2,6 +2,8 @@ package com.novacorp.inmonode.inmonodebackend.financial.domain.repositories;
 
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.aggregates.AccountStatement;
 
+import java.time.LocalDate;
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -20,4 +22,11 @@ public interface AccountStatementRepository {
     Optional<AccountStatement> findByContractId(Long contractId);
 
     Optional<AccountStatement> findByReservationId(Long reservationId);
+
+    /**
+     * Ids of the statements with something to do in the daily review on {@code asOfDate} (US-24): a pending
+     * installment past due or due within {@code reminderDays} days and not reminded, or an overdue one not notified.
+     * Only ids: each statement is then read under the lock of its lot.
+     */
+    List<Long> findIdsToReview(LocalDate asOfDate, int reminderDays);
 }

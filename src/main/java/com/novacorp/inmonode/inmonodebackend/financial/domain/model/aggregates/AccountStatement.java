@@ -9,6 +9,7 @@ import java.math.RoundingMode;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
@@ -142,9 +143,50 @@ public class AccountStatement {
      * @throws IllegalStateException    when the installment is already paid
      */
     public void registerInstallmentPayment(int number, BigDecimal paid, Instant paidAt) {
-        findInstallment(number)
-                .orElseThrow(() -> new IllegalArgumentException("installment %d does not exist".formatted(number)))
-                .registerPayment(paid, paidAt);
+        existingInstallment(number).registerPayment(paid, paidAt);
+    }
+
+    /**
+     * US-24, Scenario 2: every pending installment whose due date has passed by {@code asOfDate} falls overdue with
+     * its late fee of {@code lateFeeRate} % of its amount.
+     *
+     * @return the installments that have just fallen overdue
+     */
+    public List<Installment> markOverdueInstallments(LocalDate asOfDate, BigDecimal lateFeeRate) {
+        var overdue = new ArrayList<Installment>();
+        for (var installment : installments) {
+            if (installment.markOverdue(asOfDate, lateFeeRate)) {
+                overdue.add(installment);
+            }
+        }
+        return List.copyOf(overdue);
+    }
+
+    /** US-24, Scenario 1: the pending installments due within {@value #DUE_SOON_DAYS} days, not reminded yet. */
+    public List<Installment> installmentsToRemind(LocalDate asOfDate) {
+        return installments.stream()
+                .filter(installment -> installment.needsReminder(asOfDate, DUE_SOON_DAYS))
+                .toList();
+    }
+
+    /** US-24, Scenario 2: the overdue installments whose buyer was not told yet. */
+    public List<Installment> overdueInstallmentsToNotify() {
+        return installments.stream().filter(Installment::needsOverdueNotice).toList();
+    }
+
+    /** US-24: the buyer was reminded of the installment, so it is not reminded again. */
+    public void recordReminder(int number, Instant sentAt) {
+        existingInstallment(number).recordReminder(sentAt);
+    }
+
+    /** US-24: the buyer was told the installment is overdue, so they are not told again. */
+    public void recordOverdueNotice(int number, Instant sentAt) {
+        existingInstallment(number).recordOverdueNotice(sentAt);
+    }
+
+    private Installment existingInstallment(int number) {
+        return findInstallment(number)
+                .orElseThrow(() -> new IllegalArgumentException("installment %d does not exist".formatted(number)));
     }
 
     /** The first installment not paid yet, by number. */
