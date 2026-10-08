@@ -83,6 +83,7 @@ class FieldSyncControllerIntegrationTest {
         publish(projectId);
         var etag = portfolio(Role.FIELD_AGENT).andReturn().getResponse().getHeader(HttpHeaders.ETAG);
         assertNotNull(etag);
+        assertTrue(etag.startsWith("W/"), "weak, so Tomcat can still compress the response: " + etag);
 
         mockMvc.perform(get(PORTFOLIO).header(HttpHeaders.AUTHORIZATION, bearer(Role.FIELD_AGENT))
                         .header(HttpHeaders.IF_NONE_MATCH, etag))
