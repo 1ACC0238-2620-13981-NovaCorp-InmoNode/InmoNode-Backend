@@ -39,9 +39,9 @@ public class LotAvailabilityFacadeImpl implements LotAvailabilityFacade {
 
     @Override
     public LotBlock blockLot(UUID transactionId, Long lotId, Long buyerId, BigDecimal initialAmount, String currency,
-                             Instant requestedAt) {
+                             int termMonths, BigDecimal annualInterestRate, Instant requestedAt) {
         var outcome = reservationCommandService.handle(new RequestWebReservationCommand(transactionId, lotId, buyerId,
-                new Money(initialAmount, currency), requestedAt));
+                new Money(initialAmount, currency), termMonths, annualInterestRate, requestedAt));
         return new LotBlock(outcome.result().name(), outcome.reservationId(), outcome.blockedUntil());
     }
 

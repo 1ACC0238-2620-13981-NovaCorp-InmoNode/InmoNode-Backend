@@ -1,6 +1,7 @@
 package com.novacorp.inmonode.inmonodebackend.financial.domain.model.aggregates;
 
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.entities.PaymentEvidence;
+import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.FinancingPlan;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.Money;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.ReservationChannel;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.ReservationStatus;
@@ -34,11 +35,12 @@ public class Reservation {
     private ReservationStatus status;
     private final List<PaymentEvidence> evidences;
     private @Nullable Instant verifiedAt;
+    private final @Nullable FinancingPlan financingPlan;
 
     private Reservation(@Nullable Long id, Long lotId, ReservationChannel channel, Long requesterId,
                         @Nullable UUID prospectId, @Nullable UUID sourceEventId, Money initialAmount,
                         Instant reservedAt, ReservationStatus status, List<PaymentEvidence> evidences,
-                        @Nullable Instant verifiedAt) {
+                        @Nullable Instant verifiedAt, @Nullable FinancingPlan financingPlan) {
         this.id = id;
         this.lotId = lotId;
         this.channel = channel;
@@ -50,6 +52,7 @@ public class Reservation {
         this.status = status;
         this.evidences = new ArrayList<>(evidences);
         this.verifiedAt = verifiedAt;
+        this.financingPlan = financingPlan;
     }
 
     /**
@@ -80,23 +83,30 @@ public class Reservation {
      *
      * @param sourceEventId the request's transaction id, shared by every context
      * @param initialAmount the down payment of the quotation the buyer accepted
+     * @param financingPlan the term and rate of that quotation, on the lot price when it was blocked
      */
     public static Reservation fromWebRequest(Long lotId, Long buyerId, UUID sourceEventId, Money initialAmount,
-                                             Instant requestedAt) {
-        if (lotId == null || buyerId == null || sourceEventId == null || initialAmount == null || requestedAt == null) {
-            throw new IllegalArgumentException("a web reservation needs its lot, buyer, id, amount and date");
+                                             FinancingPlan financingPlan, Instant requestedAt) {
+        if (lotId == null || buyerId == null || sourceEventId == null || initialAmount == null || financingPlan == null
+                || requestedAt == null) {
+            throw new IllegalArgumentException("a web reservation needs its lot, buyer, id, amount, plan and date");
+        }
+        if (!initialAmount.currency().equals(financingPlan.lotPrice().currency())
+                || initialAmount.amount().compareTo(financingPlan.lotPrice().amount()) >= 0) {
+            throw new IllegalArgumentException("the down payment must be less than the lot price, in its currency");
         }
         return new Reservation(null, lotId, ReservationChannel.WEB, buyerId, null, sourceEventId, initialAmount,
-                requestedAt, ReservationStatus.BLOCKED, List.of(), null);
+                requestedAt, ReservationStatus.BLOCKED, List.of(), null, financingPlan);
     }
 
-    /** Rebuilds an already persisted reservation, with the payment evidences it received. */
+    /** Rebuilds an already persisted reservation, with the payment evidences it received and its plan, if any. */
     public static Reservation restore(Long id, Long lotId, ReservationChannel channel, Long requesterId,
                                       @Nullable UUID prospectId, @Nullable UUID sourceEventId, Money initialAmount,
                                       Instant reservedAt, ReservationStatus status,
-                                      List<PaymentEvidence> evidences, @Nullable Instant verifiedAt) {
+                                      List<PaymentEvidence> evidences, @Nullable Instant verifiedAt,
+                                      @Nullable FinancingPlan financingPlan) {
         return new Reservation(id, lotId, channel, requesterId, prospectId, sourceEventId, initialAmount,
-                reservedAt, status, evidences, verifiedAt);
+                reservedAt, status, evidences, verifiedAt, financingPlan);
     }
 
     private static Reservation field(Long lotId, Long agentId, UUID prospectId, UUID sourceEventId,
@@ -106,7 +116,7 @@ public class Reservation {
             throw new IllegalArgumentException("a field reservation needs its lot, agent, prospect, id, amount and date");
         }
         return new Reservation(null, lotId, ReservationChannel.FIELD, agentId, prospectId, sourceEventId,
-                initialAmount, reservedAt, status, List.of(), null);
+                initialAmount, reservedAt, status, List.of(), null, null);
     }
 
     /**
@@ -215,4 +225,6 @@ public class Reservation {
     public ReservationStatus getStatus() { return status; }
     public List<PaymentEvidence> getEvidences() { return List.copyOf(evidences); }
     public @Nullable Instant getVerifiedAt() { return verifiedAt; }
+    /** The financing the buyer agreed to; {@code null} for a field reservation. */
+    public @Nullable FinancingPlan getFinancingPlan() { return financingPlan; }
 }

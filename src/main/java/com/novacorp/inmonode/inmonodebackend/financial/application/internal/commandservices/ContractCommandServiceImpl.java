@@ -1,6 +1,7 @@
 package com.novacorp.inmonode.inmonodebackend.financial.application.internal.commandservices;
 
 import com.novacorp.inmonode.inmonodebackend.financial.application.internal.outboundservices.acl.ExternalIamService;
+import com.novacorp.inmonode.inmonodebackend.financial.domain.model.aggregates.AccountStatement;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.aggregates.Contract;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.aggregates.Reservation;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.commands.AcknowledgeContractCommand;
@@ -8,6 +9,7 @@ import com.novacorp.inmonode.inmonodebackend.financial.domain.model.commands.Iss
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.commands.RequestContractUploadCommand;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.ContractDocument;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.ContractUpload;
+import com.novacorp.inmonode.inmonodebackend.financial.domain.repositories.AccountStatementRepository;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.repositories.ContractRepository;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.repositories.ReservationRepository;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.services.ContractCommandService;
@@ -19,6 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.Duration;
+import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Objects;
 import java.util.UUID;
@@ -31,15 +34,19 @@ public class ContractCommandServiceImpl implements ContractCommandService {
 
     private final ReservationRepository reservationRepository;
     private final ContractRepository contractRepository;
+    private final AccountStatementRepository accountStatementRepository;
     private final ObjectStorage objectStorage;
     private final ExternalIamService externalIamService;
     private final Clock clock;
 
     public ContractCommandServiceImpl(ReservationRepository reservationRepository,
-                                      ContractRepository contractRepository, ObjectStorage objectStorage,
-                                      ExternalIamService externalIamService, Clock clock) {
+                                      ContractRepository contractRepository,
+                                      AccountStatementRepository accountStatementRepository,
+                                      ObjectStorage objectStorage, ExternalIamService externalIamService,
+                                      Clock clock) {
         this.reservationRepository = reservationRepository;
         this.contractRepository = contractRepository;
+        this.accountStatementRepository = accountStatementRepository;
         this.objectStorage = objectStorage;
         this.externalIamService = externalIamService;
         this.clock = clock;
@@ -92,9 +99,27 @@ public class ContractCommandServiceImpl implements ContractCommandService {
         }
         // PostgreSQL keeps microseconds: the date answered now must equal the one read back later.
         var now = clock.instant().truncatedTo(ChronoUnit.MICROS);
-        return Result.success(contract.registerBuyerAcknowledgment(buyerId, now)
-                ? contractRepository.save(contract)
-                : contract);
+        if (!contract.registerBuyerAcknowledgment(buyerId, now)) {
+            return Result.success(contract);
+        }
+        var saved = contractRepository.save(contract);
+        openAccountStatement(saved, now);
+        return Result.success(saved);
+    }
+
+    /**
+     * US-23: the agreement opens the buyer's account statement, in the same transaction. Web reservations made before
+     * the financing plan was kept have none to schedule, so they get no statement.
+     */
+    private void openAccountStatement(Contract contract, Instant now) {
+        var contractId = Objects.requireNonNull(contract.getId());
+        if (accountStatementRepository.findByContractId(contractId).isPresent()) {
+            return;
+        }
+        reservationRepository.findById(contract.getReservationId())
+                .filter(reservation -> reservation.getFinancingPlan() != null)
+                .ifPresent(reservation ->
+                        accountStatementRepository.save(AccountStatement.open(contract, reservation, now)));
     }
 
     /** The reservation, when it can get its contract now. */

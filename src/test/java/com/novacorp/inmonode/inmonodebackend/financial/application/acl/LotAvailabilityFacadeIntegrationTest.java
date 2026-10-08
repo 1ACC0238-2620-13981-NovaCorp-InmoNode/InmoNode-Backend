@@ -50,6 +50,7 @@ class LotAvailabilityFacadeIntegrationTest {
     private static final long BUYER = 41L;
     private static final long OTHER_BUYER = 42L;
     private static final BigDecimal DOWN_PAYMENT = new BigDecimal("9000");
+    private static final BigDecimal TWELVE_PERCENT = new BigDecimal("12");
 
     @Autowired
     private LotAvailabilityFacade facade;
@@ -118,6 +119,11 @@ class LotAvailabilityFacadeIntegrationTest {
         assertEquals(BUYER, reservation.getRequesterId());
         assertNull(reservation.getProspectId());
         assertEquals(new Money(DOWN_PAYMENT, "PEN"), reservation.getInitialAmount());
+        var plan = reservation.getFinancingPlan();
+        assertNotNull(plan, "the quotation terms become the reservation financing plan");
+        assertEquals(new Money(new BigDecimal("45000"), "PEN"), plan.lotPrice());
+        assertEquals(12, plan.termMonths());
+        assertEquals(new BigDecimal("12.000"), plan.annualInterestRate());
         var blocked = reload(lot);
         assertEquals(LotStatus.BLOCKED, blocked.getStatus());
         assertEquals(reservation.getId(), blocked.getCurrentReservationId());
@@ -156,7 +162,7 @@ class LotAvailabilityFacadeIntegrationTest {
 
         assertEquals("LOT_NOT_FOUND", block(draftRequest, lot(false), BUYER).result());
         assertEquals("LOT_NOT_FOUND", facade.blockLot(UUID.randomUUID(), 999_999L, BUYER, DOWN_PAYMENT, "PEN",
-                Instant.now()).result());
+                12, TWELVE_PERCENT, Instant.now()).result());
         assertTrue(reservationRepository.findBySourceEventId(draftRequest).isEmpty());
     }
 
@@ -218,14 +224,20 @@ class LotAvailabilityFacadeIntegrationTest {
         var lot = lot(true);
 
         assertThrows(IllegalArgumentException.class,
-                () -> facade.blockLot(UUID.randomUUID(), lot.getId(), BUYER, BigDecimal.ZERO, "PEN", Instant.now()));
+                () -> facade.blockLot(UUID.randomUUID(), lot.getId(), BUYER, BigDecimal.ZERO, "PEN", 12,
+                        TWELVE_PERCENT, Instant.now()));
         assertThrows(IllegalArgumentException.class,
-                () -> facade.blockLot(UUID.randomUUID(), lot.getId(), BUYER, DOWN_PAYMENT, "soles", Instant.now()));
+                () -> facade.blockLot(UUID.randomUUID(), lot.getId(), BUYER, DOWN_PAYMENT, "soles", 12,
+                        TWELVE_PERCENT, Instant.now()));
+        assertThrows(IllegalArgumentException.class,
+                () -> facade.blockLot(UUID.randomUUID(), lot.getId(), BUYER, DOWN_PAYMENT, "PEN", 0,
+                        TWELVE_PERCENT, Instant.now()), "a term out of range");
         assertEquals(LotStatus.AVAILABLE, reload(lot).getStatus());
     }
 
     private LotBlock block(UUID transactionId, Lot lot, long buyer) {
-        return facade.blockLot(transactionId, lot.getId(), buyer, DOWN_PAYMENT, "PEN", Instant.now());
+        return facade.blockLot(transactionId, lot.getId(), buyer, DOWN_PAYMENT, "PEN", 12, TWELVE_PERCENT,
+                Instant.now());
     }
 
     private Lot reload(Lot lot) {

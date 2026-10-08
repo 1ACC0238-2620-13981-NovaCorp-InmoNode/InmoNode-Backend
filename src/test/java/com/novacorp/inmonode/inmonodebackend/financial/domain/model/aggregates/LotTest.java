@@ -91,6 +91,23 @@ class LotTest {
     }
 
     @Test
+    void aPaidOffStatementSellsTheLotReservedForItsReservation() {
+        var lot = newLot();
+        lot.block(10L, NOW, DAY);
+        lot.moveToPendingVerification(10L, NOW);
+        assertFalse(lot.markSold(10L), "a lot under verification is not reserved yet");
+        lot.markReserved(10L);
+
+        assertFalse(lot.markSold(11L), "another reservation");
+        assertTrue(lot.markSold(10L));
+
+        assertEquals(LotStatus.SOLD, lot.getStatus());
+        assertEquals(10L, lot.getCurrentReservationId());
+        assertFalse(lot.isAvailable(NOW));
+        assertFalse(lot.markSold(10L), "it is sold once");
+    }
+
+    @Test
     void aRejectedVerificationHoldsTheLotAgainForANewWindow() {
         var lot = newLot();
         lot.block(10L, NOW, DAY);

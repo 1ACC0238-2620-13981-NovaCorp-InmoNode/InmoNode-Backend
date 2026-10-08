@@ -3,6 +3,7 @@ package com.novacorp.inmonode.inmonodebackend.financial.domain.model.aggregates;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.entities.PaymentEvidence;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.ContractDocument;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.ContractStatus;
+import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.FinancingPlan;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.Money;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.PaymentEvidenceSource;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.PaymentEvidenceStatus;
@@ -50,7 +51,7 @@ class ContractTest {
         assertTrue(Contract.issuingObstacle(web(ReservationStatus.PENDING_VERIFICATION)).orElseThrow()
                 .contains("PENDING_VERIFICATION"));
         var field = Reservation.restore(6L, 3L, ReservationChannel.FIELD, 7L, UUID.randomUUID(), TRANSACTION,
-                Money.of(new BigDecimal("1500")), NOW, ReservationStatus.VERIFIED, List.of(), NOW);
+                Money.of(new BigDecimal("1500")), NOW, ReservationStatus.VERIFIED, List.of(), NOW, null);
         assertTrue(Contract.issuingObstacle(field).orElseThrow().contains("field"));
         assertThrows(IllegalStateException.class,
                 () -> Contract.issue(field, new ContractDocument(TRANSACTION, DOCUMENT, 2048), 77L, NOW));
@@ -98,6 +99,7 @@ class ContractTest {
                 status == ReservationStatus.VERIFIED ? NOW : null);
         return Reservation.restore(5L, 3L, ReservationChannel.WEB, 41L, null, TRANSACTION,
                 Money.of(new BigDecimal("9000")), NOW, status, List.of(evidence),
-                status == ReservationStatus.VERIFIED ? NOW : null);
+                status == ReservationStatus.VERIFIED ? NOW : null,
+                new FinancingPlan(Money.of(new BigDecimal("45000")), 12, new BigDecimal("12")));
     }
 }

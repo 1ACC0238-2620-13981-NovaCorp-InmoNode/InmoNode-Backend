@@ -25,8 +25,12 @@ public interface LotAvailabilityFacade {
      * @param transactionId id of the separation request, shared by every context
      * @param initialAmount the down payment of the quotation the buyer accepted
      * @param currency      ISO 4217 code of the amount, the one of the lot price
-     * @throws IllegalArgumentException when the amount is not positive or the currency is not an ISO code
+     * @param termMonths    the term of the accepted quotation; with the rate, it becomes the reservation financing
+     *                      plan, on the lot price at the moment of the block
+     * @param annualInterestRate the rate of that quotation, as a percentage
+     * @throws IllegalArgumentException when the amount is not positive, the currency is not an ISO code, or the term
+     *                                  or the rate are out of range
      */
     LotBlock blockLot(UUID transactionId, Long lotId, Long buyerId, BigDecimal initialAmount, String currency,
-                      Instant requestedAt);
+                      int termMonths, BigDecimal annualInterestRate, Instant requestedAt);
 }

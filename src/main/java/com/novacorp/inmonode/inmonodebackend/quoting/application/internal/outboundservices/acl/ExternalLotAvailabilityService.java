@@ -8,6 +8,7 @@ import com.novacorp.inmonode.inmonodebackend.quoting.domain.model.valueobjects.L
 import com.novacorp.inmonode.inmonodebackend.quoting.domain.model.valueobjects.Money;
 import org.springframework.stereotype.Service;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
@@ -31,13 +32,14 @@ public class ExternalLotAvailabilityService {
     }
 
     /**
-     * Asks for the lot to be held for the buyer's request. Joins the caller's transaction, so the block and the
-     * request are stored together; a rejection by concurrency is passed on, never retried.
+     * Asks for the lot to be held for the buyer's request, with the terms of their quotation so financial can open
+     * the account statement later. Joins the caller's transaction, so the block and the request are stored together;
+     * a rejection by concurrency is passed on, never retried.
      */
     public LotBlockOutcome blockLot(UUID transactionId, Long lotId, Long buyerId, Money initialAmount,
-                                    Instant requestedAt) {
+                                    int termMonths, BigDecimal annualInterestRate, Instant requestedAt) {
         var block = lotAvailabilityFacade.blockLot(transactionId, lotId, buyerId, initialAmount.amount(),
-                initialAmount.currency(), requestedAt);
+                initialAmount.currency(), termMonths, annualInterestRate, requestedAt);
         var result = switch (block.result()) {
             case "BLOCKED" -> LotBlockOutcome.Result.BLOCKED;
             case "LOT_UNAVAILABLE" -> LotBlockOutcome.Result.UNAVAILABLE;

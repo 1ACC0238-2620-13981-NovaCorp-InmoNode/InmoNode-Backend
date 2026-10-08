@@ -144,7 +144,7 @@ class QuotationsIntegrationTest {
         var buyer = BUYERS.incrementAndGet();
         var lot = lot(true);
         lotAvailabilityFacade.blockLot(UUID.randomUUID(), lot.getId(), 999L, new BigDecimal("9000"), "PEN",
-                Instant.now());
+                12, new BigDecimal("12"), Instant.now());
 
         simulate(buyer, lot.getId(), "9000", 12)
                 .andExpect(status().isConflict())

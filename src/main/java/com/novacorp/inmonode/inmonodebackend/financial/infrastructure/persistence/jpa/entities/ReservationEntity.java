@@ -61,6 +61,15 @@ public class ReservationEntity extends AuditableAbstractPersistenceEntity {
 
     private Instant verifiedAt;
 
+    /** Price of the lot when a web reservation blocked it; with the term and the rate, its financing plan. */
+    @Column(precision = 14, scale = 2)
+    private BigDecimal lotPrice;
+
+    private Integer termMonths;
+
+    @Column(precision = 6, scale = 3)
+    private BigDecimal annualInterestRate;
+
     /** A reservation receives few evidences and needs them all to be rebuilt, so they are loaded with it. */
     @OneToMany(mappedBy = "reservation", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
     @OrderBy("id")
