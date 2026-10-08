@@ -1,6 +1,7 @@
 package com.novacorp.inmonode.inmonodebackend.financial.domain.services;
 
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.aggregates.Contract;
+import com.novacorp.inmonode.inmonodebackend.financial.domain.model.commands.AcknowledgeContractCommand;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.commands.IssueContractCommand;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.commands.RequestContractUploadCommand;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.ContractUpload;
@@ -26,4 +27,10 @@ public interface ContractCommandService {
      * when the PDF is not in the file repository or differs from the declared size.
      */
     Result<Contract, ApplicationError> handle(IssueContractCommand command);
+
+    /**
+     * US-22: registers the buyer's preliminary agreement. Idempotent: repeating it keeps the first date. Fails with
+     * {@code CONTRACT_NOT_FOUND} when the contract does not exist or is not the caller's.
+     */
+    Result<Contract, ApplicationError> handle(AcknowledgeContractCommand command);
 }

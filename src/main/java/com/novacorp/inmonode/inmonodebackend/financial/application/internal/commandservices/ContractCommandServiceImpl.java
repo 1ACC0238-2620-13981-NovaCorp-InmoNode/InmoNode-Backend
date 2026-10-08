@@ -3,6 +3,7 @@ package com.novacorp.inmonode.inmonodebackend.financial.application.internal.com
 import com.novacorp.inmonode.inmonodebackend.financial.application.internal.outboundservices.acl.ExternalIamService;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.aggregates.Contract;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.aggregates.Reservation;
+import com.novacorp.inmonode.inmonodebackend.financial.domain.model.commands.AcknowledgeContractCommand;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.commands.IssueContractCommand;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.commands.RequestContractUploadCommand;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.ContractDocument;
@@ -74,6 +75,26 @@ public class ContractCommandServiceImpl implements ContractCommandService {
             var now = clock.instant().truncatedTo(ChronoUnit.MICROS);
             return Result.success(contractRepository.save(Contract.issue(reservation, document, issuerId, now)));
         });
+    }
+
+    @Override
+    @Transactional
+    public Result<Contract, ApplicationError> handle(AcknowledgeContractCommand command) {
+        var buyerId = externalIamService.currentUserId().orElse(null);
+        if (buyerId == null) {
+            return Result.failure(new ApplicationError("UNAUTHORIZED", "The buyer is not authenticated"));
+        }
+        var contract = contractRepository.findById(command.contractId())
+                .filter(found -> found.belongsTo(buyerId))
+                .orElse(null);
+        if (contract == null) {
+            return Result.failure(ApplicationError.notFound("contract", String.valueOf(command.contractId())));
+        }
+        // PostgreSQL keeps microseconds: the date answered now must equal the one read back later.
+        var now = clock.instant().truncatedTo(ChronoUnit.MICROS);
+        return Result.success(contract.registerBuyerAcknowledgment(buyerId, now)
+                ? contractRepository.save(contract)
+                : contract);
     }
 
     /** The reservation, when it can get its contract now. */

@@ -57,6 +57,21 @@ class ContractTest {
     }
 
     @Test
+    void onlyTheBuyerAgreesAndTheFirstAgreementIsKept() {
+        var contract = Contract.issue(web(ReservationStatus.VERIFIED), new ContractDocument(TRANSACTION, DOCUMENT, 2048),
+                77L, NOW);
+        var later = NOW.plusSeconds(3600);
+
+        assertThrows(IllegalArgumentException.class, () -> contract.registerBuyerAcknowledgment(42L, later));
+        assertTrue(contract.registerBuyerAcknowledgment(41L, later));
+        assertFalse(contract.registerBuyerAcknowledgment(41L, later.plusSeconds(60)));
+
+        assertEquals(later, contract.getBuyerAcknowledgedAt());
+        assertTrue(contract.belongsTo(41L));
+        assertFalse(contract.belongsTo(42L));
+    }
+
+    @Test
     void theDocumentMustBelongToTheReservation() {
         assertThrows(IllegalArgumentException.class, () -> Contract.issue(web(ReservationStatus.VERIFIED),
                 new ContractDocument(UUID.randomUUID(), DOCUMENT, 2048), 77L, NOW));

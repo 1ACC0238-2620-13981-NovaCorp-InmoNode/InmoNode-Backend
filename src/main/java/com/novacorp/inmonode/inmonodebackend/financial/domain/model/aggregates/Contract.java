@@ -79,6 +79,28 @@ public class Contract {
                 ContractStatus.ISSUED, now, issuedBy, null);
     }
 
+    /**
+     * US-22: the buyer gives their preliminary agreement with the terms. Only the first one counts, so repeating it
+     * keeps the original date.
+     *
+     * @return whether it was registered now
+     * @throws IllegalArgumentException when the user is not the buyer of the contract
+     */
+    public boolean registerBuyerAcknowledgment(Long userId, Instant now) {
+        if (!belongsTo(userId)) {
+            throw new IllegalArgumentException("only the buyer of the contract can acknowledge it");
+        }
+        if (buyerAcknowledgedAt != null) {
+            return false;
+        }
+        buyerAcknowledgedAt = now;
+        return true;
+    }
+
+    public boolean belongsTo(Long userId) {
+        return buyerId.equals(userId);
+    }
+
     /** Rebuilds an already persisted contract. */
     public static Contract restore(Long id, Long reservationId, UUID transactionId, Long buyerId, Long lotId,
                                    UUID documentId, String objectKey, long sizeBytes, ContractStatus status,
