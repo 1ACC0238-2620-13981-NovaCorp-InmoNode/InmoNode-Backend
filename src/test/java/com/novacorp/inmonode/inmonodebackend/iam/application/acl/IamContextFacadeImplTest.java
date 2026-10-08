@@ -55,7 +55,7 @@ class IamContextFacadeImplTest {
 
     @Test
     void fetchesEmailOfExistingUserOnly() {
-        var user = User.restore(7L, "agent@mail.com", "hash", Role.FIELD_AGENT, UserStatus.ACTIVE, null, 0, null);
+        var user = User.restore(7L, "agent@mail.com", "hash", Role.FIELD_AGENT, UserStatus.ACTIVE, null, null, 0, null);
         when(repository.findById(7L)).thenReturn(Optional.of(user));
         when(repository.findById(99L)).thenReturn(Optional.empty());
 

@@ -17,7 +17,7 @@ class JwtTokenServiceTest {
     private static final String SECRET = "unit-test-secret-unit-test-secret-1234";
     private static final Instant NOW = Instant.parse("2026-10-07T10:00:00Z");
     private static final User USER =
-            User.restore(7L, "ana@mail.com", "hash", Role.FIELD_AGENT, UserStatus.ACTIVE, null, 0, null);
+            User.restore(7L, "ana@mail.com", "hash", Role.FIELD_AGENT, UserStatus.ACTIVE, null, null, 0, null);
 
     private static JwtTokenService serviceAt(Instant instant, String secret) {
         return new JwtTokenService(secret, 3600, Clock.fixed(instant, ZoneOffset.UTC));

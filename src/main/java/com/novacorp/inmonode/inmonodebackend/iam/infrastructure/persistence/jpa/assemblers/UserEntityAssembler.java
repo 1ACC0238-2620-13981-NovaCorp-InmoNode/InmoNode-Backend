@@ -12,8 +12,8 @@ public final class UserEntityAssembler {
 
     public static User toDomain(UserEntity entity) {
         return User.restore(entity.getId(), entity.getEmail(), entity.getPasswordHash(), entity.getRole(),
-                entity.getStatus(), entity.getVerificationToken(), entity.getFailedAttempts(),
-                entity.getLockedUntil());
+                entity.getStatus(), entity.getVerificationToken(), entity.getVerificationSentAt(),
+                entity.getFailedAttempts(), entity.getLockedUntil());
     }
 
     /** Copies the aggregate state onto the entity; audit columns and id stay untouched. */
@@ -23,6 +23,7 @@ public final class UserEntityAssembler {
         entity.setRole(user.getRole());
         entity.setStatus(user.getStatus());
         entity.setVerificationToken(user.getVerificationToken());
+        entity.setVerificationSentAt(user.getVerificationSentAt());
         entity.setFailedAttempts(user.getFailedAttempts());
         entity.setLockedUntil(user.getLockedUntil());
         return entity;

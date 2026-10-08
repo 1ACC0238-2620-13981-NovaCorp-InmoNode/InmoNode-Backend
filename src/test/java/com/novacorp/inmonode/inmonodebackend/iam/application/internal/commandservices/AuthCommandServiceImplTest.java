@@ -238,7 +238,7 @@ class AuthCommandServiceImplTest {
     }
 
     private static User user(UserStatus status) {
-        return User.restore(1L, "ana@mail.com", "hash:secret123", Role.BUYER, status, null, 0, null);
+        return User.restore(1L, "ana@mail.com", "hash:secret123", Role.BUYER, status, null, null, 0, null);
     }
 
     private static <T> T success(Result<T, ApplicationError> result) {

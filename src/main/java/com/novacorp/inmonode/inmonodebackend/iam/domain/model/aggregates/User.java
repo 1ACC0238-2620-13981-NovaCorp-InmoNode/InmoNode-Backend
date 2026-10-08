@@ -29,37 +29,45 @@ public class User extends AbstractDomainAggregateRoot<User> {
     private final Role role;
     private UserStatus status;
     private @Nullable String verificationToken;
+    private @Nullable Instant verificationSentAt;
     private int failedAttempts;
     private @Nullable Instant lockedUntil;
 
     private User(@Nullable Long id, String email, String passwordHash, Role role, UserStatus status,
-                 @Nullable String verificationToken, int failedAttempts, @Nullable Instant lockedUntil) {
+                 @Nullable String verificationToken, @Nullable Instant verificationSentAt,
+                 int failedAttempts, @Nullable Instant lockedUntil) {
         this.id = id;
         this.email = email;
         this.passwordHash = passwordHash;
         this.role = role;
         this.status = status;
         this.verificationToken = verificationToken;
+        this.verificationSentAt = verificationSentAt;
         this.failedAttempts = failedAttempts;
         this.lockedUntil = lockedUntil;
     }
 
     /**
-     * US-14, Scenario 1: creates the account as {@code INACTIVE} with a single-use verification token.
-     * Duplicate emails are rejected by the application service (Scenario 2).
+     * US-14, Scenario 1: creates the account as {@code INACTIVE} with a single-use verification token,
+     * emailed at {@code now}. Duplicate emails are rejected by the application service (Scenario 2).
      */
-    public static User register(String email, String passwordHash, Role role) {
-        var token = UUID.randomUUID().toString().replace("-", "");
-        var user = new User(null, normalize(email), passwordHash, role, UserStatus.INACTIVE, token, 0, null);
+    public static User register(String email, String passwordHash, Role role, Instant now) {
+        var token = newVerificationToken();
+        var user = new User(null, normalize(email), passwordHash, role, UserStatus.INACTIVE, token, now, 0, null);
         user.registerDomainEvent(new UserRegisteredEvent(user.email, token));
         return user;
     }
 
     /** Rebuilds an already persisted account without raising events. */
     public static User restore(Long id, String email, String passwordHash, Role role, UserStatus status,
-                               @Nullable String verificationToken, int failedAttempts,
-                               @Nullable Instant lockedUntil) {
-        return new User(id, email, passwordHash, role, status, verificationToken, failedAttempts, lockedUntil);
+                               @Nullable String verificationToken, @Nullable Instant verificationSentAt,
+                               int failedAttempts, @Nullable Instant lockedUntil) {
+        return new User(id, email, passwordHash, role, status, verificationToken, verificationSentAt,
+                failedAttempts, lockedUntil);
+    }
+
+    private static String newVerificationToken() {
+        return UUID.randomUUID().toString().replace("-", "");
     }
 
     public static String normalize(String email) {
@@ -111,6 +119,7 @@ public class User extends AbstractDomainAggregateRoot<User> {
     public Role getRole() { return role; }
     public UserStatus getStatus() { return status; }
     public @Nullable String getVerificationToken() { return verificationToken; }
+    public @Nullable Instant getVerificationSentAt() { return verificationSentAt; }
     public int getFailedAttempts() { return failedAttempts; }
     public @Nullable Instant getLockedUntil() { return lockedUntil; }
 }

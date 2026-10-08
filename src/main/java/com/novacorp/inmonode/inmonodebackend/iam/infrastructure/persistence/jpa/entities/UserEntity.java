@@ -36,6 +36,8 @@ public class UserEntity extends AuditableAbstractPersistenceEntity {
     @Column(length = 64)
     private String verificationToken;
 
+    private Instant verificationSentAt;
+
     @Column(nullable = false)
     private int failedAttempts;
 

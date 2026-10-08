@@ -90,7 +90,7 @@ class RefreshTokenRepositoryImplIntegrationTest {
 
     /** Persists a user without its registration event, so no verification email is attempted. */
     private Long persistedUserId() {
-        var user = User.register("user-" + UUID.randomUUID() + "@mail.com", "hash", Role.BUYER);
+        var user = User.register("user-" + UUID.randomUUID() + "@mail.com", "hash", Role.BUYER, NOW);
         user.clearDomainEvents();
         return userRepository.save(user).getId();
     }

@@ -49,7 +49,7 @@ class WebSecurityConfigurationIntegrationTest {
     private static final String CATALOG_ADMIN_PATH = "/api/v1/security-probe/catalog-admin";
     private static final String ALLOWED_ORIGIN = "http://localhost:5173";
     private static final User BUYER =
-            User.restore(42L, "buyer@mail.com", "hash", Role.BUYER, UserStatus.ACTIVE, null, 0, null);
+            User.restore(42L, "buyer@mail.com", "hash", Role.BUYER, UserStatus.ACTIVE, null, null, 0, null);
 
     @Autowired
     private MockMvc mockMvc;

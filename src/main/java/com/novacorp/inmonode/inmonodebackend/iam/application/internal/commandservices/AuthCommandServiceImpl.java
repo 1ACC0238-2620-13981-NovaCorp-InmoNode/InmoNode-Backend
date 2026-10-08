@@ -64,7 +64,7 @@ public class AuthCommandServiceImpl implements AuthCommandService {
             return Result.failure(ApplicationError.conflict("user",
                     "The email %s is already registered; use the password recovery flow".formatted(email)));
         }
-        var user = User.register(email, hashingService.encode(command.password()), Role.BUYER);
+        var user = User.register(email, hashingService.encode(command.password()), Role.BUYER, clock.instant());
         return Result.success(userRepository.save(user));
     }
 

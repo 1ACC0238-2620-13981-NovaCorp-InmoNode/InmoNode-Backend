@@ -16,18 +16,19 @@ class UserTest {
 
     @Test
     void registerCreatesInactiveUserWithTokenAndEvent() {
-        var user = User.register("  Ana@Mail.com ", "hash", Role.BUYER);
+        var user = User.register("  Ana@Mail.com ", "hash", Role.BUYER, NOW);
 
         assertEquals("ana@mail.com", user.getEmail());
         assertEquals(UserStatus.INACTIVE, user.getStatus());
         assertNotNull(user.getVerificationToken());
+        assertEquals(NOW, user.getVerificationSentAt());
         assertTrue(user.domainEvents().stream().anyMatch(e ->
                 e instanceof UserRegisteredEvent ev && ev.verificationToken().equals(user.getVerificationToken())));
     }
 
     @Test
     void verifyEmailActivatesAccountOnlyWithMatchingTokenAndIsSingleUse() {
-        var user = User.register("a@mail.com", "hash", Role.BUYER);
+        var user = User.register("a@mail.com", "hash", Role.BUYER, NOW);
         var token = user.getVerificationToken();
 
         assertFalse(user.verifyEmail("wrong"));
@@ -66,6 +67,6 @@ class UserTest {
     }
 
     private static User activeUser() {
-        return User.restore(1L, "a@mail.com", "hash", Role.BUYER, UserStatus.ACTIVE, null, 0, null);
+        return User.restore(1L, "a@mail.com", "hash", Role.BUYER, UserStatus.ACTIVE, null, null, 0, null);
     }
 }
