@@ -56,6 +56,11 @@ public class JwtTokenService implements TokenService {
     }
 
     @Override
+    public long expirationSeconds() {
+        return expirationSeconds;
+    }
+
+    @Override
     public Optional<TokenClaims> parseToken(String token) {
         try {
             Claims claims = Jwts.parser()

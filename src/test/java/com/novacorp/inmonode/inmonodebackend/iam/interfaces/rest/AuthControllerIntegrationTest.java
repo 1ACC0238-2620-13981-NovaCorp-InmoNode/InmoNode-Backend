@@ -1,6 +1,7 @@
 package com.novacorp.inmonode.inmonodebackend.iam.interfaces.rest;
 
 import com.novacorp.inmonode.inmonodebackend.TestcontainersConfiguration;
+import com.jayway.jsonpath.JsonPath;
 import com.novacorp.inmonode.inmonodebackend.iam.application.internal.outboundservices.notifications.VerificationEmailSender;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -17,6 +18,7 @@ import org.springframework.test.web.servlet.ResultActions;
 
 import java.util.UUID;
 
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -94,7 +96,40 @@ class AuthControllerIntegrationTest {
         login(email, PASSWORD)
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.tokenType").value("Bearer"))
-                .andExpect(jsonPath("$.token").isNotEmpty());
+                .andExpect(jsonPath("$.token").isNotEmpty())
+                .andExpect(jsonPath("$.expiresIn").value(3600))
+                .andExpect(jsonPath("$.refreshToken").isNotEmpty());
+    }
+
+    @Test
+    void refreshRotatesTheTokenAndAReplayClosesEverySession() throws Exception {
+        var email = uniqueEmail();
+        register(email).andExpect(status().isCreated());
+        verifyEmail(capturedVerificationToken(email)).andExpect(status().isOk());
+        var first = refreshTokenOf(login(email, PASSWORD).andExpect(status().isOk()));
+
+        var second = refreshTokenOf(refresh(first)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.tokenType").value("Bearer"))
+                .andExpect(jsonPath("$.token").isNotEmpty()));
+        assertNotEquals(first, second);
+
+        refresh(first)
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("INVALID_REFRESH_TOKEN"));
+        refresh(second)
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("INVALID_REFRESH_TOKEN"));
+    }
+
+    @Test
+    void refreshWithUnknownOrBlankTokenIsRejected() throws Exception {
+        refresh("not-a-refresh-token")
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("INVALID_REFRESH_TOKEN"));
+        refresh("")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
     }
 
     @Test
@@ -144,6 +179,15 @@ class AuthControllerIntegrationTest {
     private ResultActions verifyEmail(String token) throws Exception {
         return postJson("/api/v1/auth/verify-email", """
                 {"token": "%s"}""".formatted(token));
+    }
+
+    private ResultActions refresh(String refreshToken) throws Exception {
+        return postJson("/api/v1/auth/refresh", """
+                {"refreshToken": "%s"}""".formatted(refreshToken));
+    }
+
+    private static String refreshTokenOf(ResultActions response) throws Exception {
+        return JsonPath.read(response.andReturn().getResponse().getContentAsString(), "$.refreshToken");
     }
 
     private ResultActions postJson(String path, String body) throws Exception {

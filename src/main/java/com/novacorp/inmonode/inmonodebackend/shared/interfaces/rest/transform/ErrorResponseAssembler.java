@@ -118,7 +118,7 @@ public final class ErrorResponseAssembler {
         return switch (errorCode) {
             case "VALIDATION_ERROR" -> HttpStatus.BAD_REQUEST;
             case String s when  s.endsWith("_NOT_FOUND") -> HttpStatus.NOT_FOUND;
-            case "INVALID_CREDENTIALS", "UNAUTHORIZED" -> HttpStatus.UNAUTHORIZED;
+            case "INVALID_CREDENTIALS", "INVALID_REFRESH_TOKEN", "UNAUTHORIZED" -> HttpStatus.UNAUTHORIZED;
             case "ACCOUNT_INACTIVE", "FORBIDDEN" -> HttpStatus.FORBIDDEN;
             case "ACCOUNT_LOCKED" -> HttpStatus.LOCKED;
             case "BUSINESS_RULE_VIOLATION" -> HttpStatusCode.valueOf(422);

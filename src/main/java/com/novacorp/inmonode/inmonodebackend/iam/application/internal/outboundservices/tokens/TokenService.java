@@ -12,6 +12,9 @@ public interface TokenService {
     /** Issues a signed token carrying the user id, email and role as claims. */
     String generateToken(User user);
 
+    /** Lifetime of the tokens issued by {@link #generateToken(User)}, reported to clients as {@code expiresIn}. */
+    long expirationSeconds();
+
     /**
      * Validates signature and expiration.
      *

@@ -49,6 +49,7 @@ services:
       # The 'prod' profile refuses to start without a JWT secret of at least 32 bytes.
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required; set it in .env}
       JWT_EXPIRATION_SECONDS: ${JWT_EXPIRATION_SECONDS:-3600}
+      REFRESH_TOKEN_EXPIRATION_DAYS: ${REFRESH_TOKEN_EXPIRATION_DAYS:-30}
       # Mailpit needs neither authentication nor TLS; Brevo (production) needs both.
       MAIL_HOST: inmonode-mail
       MAIL_PORT: 1025
