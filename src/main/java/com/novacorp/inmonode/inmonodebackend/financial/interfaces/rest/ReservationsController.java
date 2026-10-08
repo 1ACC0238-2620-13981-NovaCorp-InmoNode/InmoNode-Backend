@@ -1,7 +1,10 @@
 package com.novacorp.inmonode.inmonodebackend.financial.interfaces.rest;
 
+import com.novacorp.inmonode.inmonodebackend.financial.domain.model.queries.GetReservationAccountStatementQuery;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.queries.GetReservationPaymentsQuery;
+import com.novacorp.inmonode.inmonodebackend.financial.domain.services.AccountStatementQueryService;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.services.ReservationQueryService;
+import com.novacorp.inmonode.inmonodebackend.financial.interfaces.rest.transform.AccountStatementResourceAssembler;
 import com.novacorp.inmonode.inmonodebackend.financial.interfaces.rest.transform.ReservationPaymentsResourceAssembler;
 import com.novacorp.inmonode.inmonodebackend.shared.interfaces.rest.transform.ResponseEntityAssembler;
 import io.swagger.v3.oas.annotations.Operation;
@@ -25,9 +28,27 @@ import java.util.UUID;
 public class ReservationsController {
 
     private final ReservationQueryService reservationQueryService;
+    private final AccountStatementQueryService accountStatementQueryService;
 
-    public ReservationsController(ReservationQueryService reservationQueryService) {
+    public ReservationsController(ReservationQueryService reservationQueryService,
+                                  AccountStatementQueryService accountStatementQueryService) {
         this.reservationQueryService = reservationQueryService;
+        this.accountStatementQueryService = accountStatementQueryService;
+    }
+
+    @GetMapping("/account-statement")
+    @PreAuthorize("hasRole('BUYER')")
+    @Operation(summary = "Get the account statement of a reservation (US-23)",
+            description = "The buyer who made the reservation. It is opened when the buyer agrees to the contract: "
+                    + "the down payment, the monthly installments (French amortization of the financed balance, "
+                    + "due on the same day of each month in Lima), what was paid, the balance and the progress. "
+                    + "dueSoon flags a next installment due within 5 days or already late (US-24). Before the "
+                    + "agreement it answers 404 ACCOUNT_STATEMENT_NOT_FOUND; a reservation that is unknown or "
+                    + "belongs to someone else answers 404 RESERVATION_NOT_FOUND.")
+    public ResponseEntity<?> getAccountStatement(@PathVariable UUID transactionId) {
+        var result = accountStatementQueryService.handle(new GetReservationAccountStatementQuery(transactionId));
+        return ResponseEntityAssembler.toResponseEntityFromResult(
+                result, AccountStatementResourceAssembler::toResourceFromView, HttpStatus.OK);
     }
 
     @GetMapping("/payment-evidences")
