@@ -65,15 +65,25 @@ public class FieldSyncCommandServiceImpl implements FieldSyncCommandService {
         return Result.success(new FieldSyncResult(prospectsSynced, outcomes));
     }
 
-    /** A reservation that took its lot is announced as "Lote separado"; conflicts and re-sends are not. */
+    /**
+     * A reservation that took its lot is announced as "Lote separado"; conflicts never are. A re-send of one that took
+     * its lot is announced again (at-least-once): if a listener failed the first time, the device's retry is the only
+     * chance to deliver it, so listeners must be idempotent.
+     */
     private ReservationSyncOutcome consolidate(Long agentId, ReservationData reservation) {
         var outcome = externalFinancialService.consolidate(agentId, reservation);
-        if (outcome.result() == ReservationSyncOutcome.Result.SYNCED) {
+        if (tookItsLot(outcome)) {
             eventPublisher.publishEvent(new FieldLotReservedEvent(reservation.reservationId(), agentId,
                     reservation.lotId(), reservation.initialAmount(), reservation.reservedAt(),
                     outcome.blockedUntil()));
         }
         return outcome;
+    }
+
+    private static boolean tookItsLot(ReservationSyncOutcome outcome) {
+        return outcome.result() == ReservationSyncOutcome.Result.SYNCED
+                || (outcome.result() == ReservationSyncOutcome.Result.DUPLICATE
+                    && outcome.originalResult() == ReservationSyncOutcome.Result.SYNCED);
     }
 
     /**

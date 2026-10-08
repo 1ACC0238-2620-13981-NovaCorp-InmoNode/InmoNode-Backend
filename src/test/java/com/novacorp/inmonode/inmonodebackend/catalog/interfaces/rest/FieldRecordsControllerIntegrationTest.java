@@ -128,7 +128,7 @@ class FieldRecordsControllerIntegrationTest {
     }
 
     @Test
-    void onlyAReservationThatTookItsLotIsAnnouncedAsLotReserved() throws Exception {
+    void aReservationThatTookItsLotIsAnnouncedAsLotReservedAndAgainOnEveryReSend() throws Exception {
         var agent = AGENTS.incrementAndGet();
         var lots = lotIdsByCode(publishedProject());
         var ana = UUID.randomUUID();
@@ -149,8 +149,12 @@ class FieldRecordsControllerIntegrationTest {
         assertEquals(Instant.parse("2026-10-08T09:30:00Z"), event.reservedAt());
         assertNotNull(event.blockedUntil());
 
-        sync(agent, body).andExpect(jsonPath("$.reservations[0].result").value("DUPLICATE"));
-        assertEquals(1, events.stream(FieldLotReservedEvent.class).count(), "a re-send is not announced again");
+        sync(agent, body)
+                .andExpect(jsonPath("$.reservations[0].result").value("DUPLICATE"))
+                .andExpect(jsonPath("$.reservations[1].result").value("DUPLICATE"));
+        var reAnnounced = events.stream(FieldLotReservedEvent.class).toList();
+        assertEquals(2, reAnnounced.size(), "a re-send is announced again (at-least-once); the conflicting one never");
+        assertEquals(event, reAnnounced.getLast(), "the re-send carries the same data");
     }
 
     @Test
