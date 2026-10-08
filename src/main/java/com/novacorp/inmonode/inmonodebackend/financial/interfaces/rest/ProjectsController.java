@@ -1,10 +1,15 @@
 package com.novacorp.inmonode.inmonodebackend.financial.interfaces.rest;
 
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.commands.PublishProjectCommand;
+import com.novacorp.inmonode.inmonodebackend.financial.domain.model.queries.GetProjectByIdQuery;
+import com.novacorp.inmonode.inmonodebackend.financial.domain.model.queries.GetPublishedProjectsQuery;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.services.ProjectCommandService;
+import com.novacorp.inmonode.inmonodebackend.financial.domain.services.ProjectQueryService;
 import com.novacorp.inmonode.inmonodebackend.financial.interfaces.rest.resources.CreateProjectResource;
+import com.novacorp.inmonode.inmonodebackend.financial.interfaces.rest.resources.ProjectSummaryResource;
 import com.novacorp.inmonode.inmonodebackend.financial.interfaces.rest.transform.CreateProjectCommandFromResourceAssembler;
 import com.novacorp.inmonode.inmonodebackend.financial.interfaces.rest.transform.ProjectResourceAssembler;
+import com.novacorp.inmonode.inmonodebackend.financial.interfaces.rest.transform.ProjectSummaryResourceAssembler;
 import com.novacorp.inmonode.inmonodebackend.shared.interfaces.rest.transform.ResponseEntityAssembler;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -12,11 +17,14 @@ import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/v1/projects")
@@ -24,9 +32,30 @@ import org.springframework.web.bind.annotation.RestController;
 public class ProjectsController {
 
     private final ProjectCommandService projectCommandService;
+    private final ProjectQueryService projectQueryService;
 
-    public ProjectsController(ProjectCommandService projectCommandService) {
+    public ProjectsController(ProjectCommandService projectCommandService, ProjectQueryService projectQueryService) {
         this.projectCommandService = projectCommandService;
+        this.projectQueryService = projectQueryService;
+    }
+
+    @GetMapping
+    @Operation(summary = "List the published projects (US-15)",
+            description = "Public, with or without a session. Each project carries its price range, its share of "
+                    + "available lots and whether it is sold out.")
+    public List<ProjectSummaryResource> getPublished() {
+        return projectQueryService.handle(new GetPublishedProjectsQuery()).stream()
+                .map(ProjectSummaryResourceAssembler::toResourceFromSummary)
+                .toList();
+    }
+
+    @GetMapping("/{projectId}")
+    @Operation(summary = "Get a project with its financing rules (US-15)",
+            description = "Public for published projects; a draft is visible only to CATALOG_ADMIN (404 otherwise).")
+    public ResponseEntity<?> getById(@PathVariable Long projectId) {
+        var result = projectQueryService.handle(new GetProjectByIdQuery(projectId));
+        return ResponseEntityAssembler.toResponseEntityFromResult(
+                result, ProjectResourceAssembler::toResourceFromEntity, HttpStatus.OK);
     }
 
     @PostMapping

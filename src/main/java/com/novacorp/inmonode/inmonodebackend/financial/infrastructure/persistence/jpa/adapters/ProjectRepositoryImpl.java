@@ -1,12 +1,14 @@
 package com.novacorp.inmonode.inmonodebackend.financial.infrastructure.persistence.jpa.adapters;
 
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.aggregates.Project;
+import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.ProjectStatus;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.repositories.ProjectRepository;
 import com.novacorp.inmonode.inmonodebackend.financial.infrastructure.persistence.jpa.assemblers.ProjectEntityAssembler;
 import com.novacorp.inmonode.inmonodebackend.financial.infrastructure.persistence.jpa.entities.ProjectEntity;
 import com.novacorp.inmonode.inmonodebackend.financial.infrastructure.persistence.jpa.repositories.ProjectJpaRepository;
 import org.springframework.stereotype.Repository;
 
+import java.util.List;
 import java.util.Optional;
 
 @Repository
@@ -35,5 +37,12 @@ public class ProjectRepositoryImpl implements ProjectRepository {
     @Override
     public boolean existsById(Long id) {
         return jpaRepository.existsById(id);
+    }
+
+    @Override
+    public List<Project> findAllPublished() {
+        return jpaRepository.findByStatusOrderByNameAsc(ProjectStatus.PUBLISHED).stream()
+                .map(ProjectEntityAssembler::toDomain)
+                .toList();
     }
 }

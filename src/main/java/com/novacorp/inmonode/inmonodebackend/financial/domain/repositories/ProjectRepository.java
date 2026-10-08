@@ -2,6 +2,7 @@ package com.novacorp.inmonode.inmonodebackend.financial.domain.repositories;
 
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.aggregates.Project;
 
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -17,4 +18,7 @@ public interface ProjectRepository {
     Optional<Project> findById(Long id);
 
     boolean existsById(Long id);
+
+    /** Published projects ordered by name. */
+    List<Project> findAllPublished();
 }
