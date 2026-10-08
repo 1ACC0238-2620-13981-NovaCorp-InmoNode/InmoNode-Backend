@@ -42,6 +42,7 @@ public class AuthCommandServiceImpl implements AuthCommandService {
     private final RefreshTokenGenerator refreshTokenGenerator;
     private final Duration refreshTokenTimeToLive;
     private final Duration verificationResendCooldown;
+    private final Duration verificationTokenTimeToLive;
     private final Clock clock;
 
     public AuthCommandServiceImpl(UserRepository userRepository, RefreshTokenRepository refreshTokenRepository,
@@ -50,6 +51,8 @@ public class AuthCommandServiceImpl implements AuthCommandService {
                                   @Value("${authorization.refresh-token.expiration-days:30}") long refreshTokenDays,
                                   @Value("${authorization.verification.resend-cooldown-seconds:60}")
                                   long verificationResendCooldownSeconds,
+                                  @Value("${authorization.verification.token-expiration-hours:24}")
+                                  long verificationTokenHours,
                                   Clock clock) {
         this.userRepository = userRepository;
         this.refreshTokenRepository = refreshTokenRepository;
@@ -58,6 +61,7 @@ public class AuthCommandServiceImpl implements AuthCommandService {
         this.refreshTokenGenerator = refreshTokenGenerator;
         this.refreshTokenTimeToLive = Duration.ofDays(refreshTokenDays);
         this.verificationResendCooldown = Duration.ofSeconds(verificationResendCooldownSeconds);
+        this.verificationTokenTimeToLive = Duration.ofHours(verificationTokenHours);
         this.clock = clock;
     }
 
@@ -102,9 +106,9 @@ public class AuthCommandServiceImpl implements AuthCommandService {
     @Transactional
     public Result<User, ApplicationError> handle(VerifyEmailCommand command) {
         var user = userRepository.findByVerificationToken(command.token()).orElse(null);
-        if (user == null || !user.verifyEmail(command.token())) {
+        if (user == null || !user.verifyEmail(command.token(), clock.instant(), verificationTokenTimeToLive)) {
             return Result.failure(ApplicationError.validationError("token",
-                    "The verification token is invalid or was already used"));
+                    "The verification token is invalid, expired or was already used"));
         }
         return Result.success(userRepository.save(user));
     }

@@ -76,12 +76,14 @@ public class User extends AbstractDomainAggregateRoot<User> {
     }
 
     /**
-     * Activates the account when the token matches. The token is single-use.
+     * Activates the account when the token matches and was emailed less than {@code timeToLive} ago.
+     * The token is single-use; an expired one is kept until a resend replaces it.
      *
      * @return {@code true} if the account was activated
      */
-    public boolean verifyEmail(String token) {
-        if (verificationToken == null || !verificationToken.equals(token)) {
+    public boolean verifyEmail(String token, Instant now, Duration timeToLive) {
+        if (verificationToken == null || !verificationToken.equals(token)
+                || verificationSentAt == null || !now.isBefore(verificationSentAt.plus(timeToLive))) {
             return false;
         }
         status = UserStatus.ACTIVE;

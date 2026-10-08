@@ -16,7 +16,7 @@ class SmtpVerificationEmailSenderTest {
 
     private final JavaMailSender mailSender = mock(JavaMailSender.class);
     private final SmtpVerificationEmailSender sender = new SmtpVerificationEmailSender(
-            mailSender, "no-reply@inmonode.dev", "https://portal.inmonode.dev/verify-email");
+            mailSender, "no-reply@inmonode.dev", "https://portal.inmonode.dev/verify-email", 24);
 
     @Test
     void sendsLinkToThePortalVerificationPage() {
@@ -29,6 +29,7 @@ class SmtpVerificationEmailSenderTest {
         assertArrayEquals(new String[]{"ana@mail.com"}, message.getTo());
         assertEquals(SmtpVerificationEmailSender.SUBJECT, message.getSubject());
         assertTrue(message.getText().contains("https://portal.inmonode.dev/verify-email?token=abc123"));
+        assertTrue(message.getText().contains("El enlace vence en 24 horas."));
     }
 
     @Test

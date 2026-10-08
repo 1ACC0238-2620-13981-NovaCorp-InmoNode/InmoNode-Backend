@@ -25,13 +25,17 @@ public class SmtpVerificationEmailSender implements VerificationEmailSender {
     private final JavaMailSender mailSender;
     private final String from;
     private final String verificationUrl;
+    private final long tokenExpirationHours;
 
     public SmtpVerificationEmailSender(JavaMailSender mailSender,
                                        @Value("${authorization.mail.from}") String from,
-                                       @Value("${authorization.verification.url}") String verificationUrl) {
+                                       @Value("${authorization.verification.url}") String verificationUrl,
+                                       @Value("${authorization.verification.token-expiration-hours:24}")
+                                       long tokenExpirationHours) {
         this.mailSender = mailSender;
         this.from = from;
         this.verificationUrl = verificationUrl;
+        this.tokenExpirationHours = tokenExpirationHours;
     }
 
     @Override
@@ -47,8 +51,10 @@ public class SmtpVerificationEmailSender implements VerificationEmailSender {
 
                 %s
 
+                El enlace vence en %s. Si vence, pide uno nuevo desde la página de inicio de sesión.
+
                 Si no creaste esta cuenta, ignora este mensaje.
-                """.formatted(verificationLink(verificationToken)));
+                """.formatted(verificationLink(verificationToken), validity()));
         try {
             mailSender.send(message);
         } catch (MailException ex) {
@@ -58,5 +64,9 @@ public class SmtpVerificationEmailSender implements VerificationEmailSender {
 
     String verificationLink(String verificationToken) {
         return "%s?token=%s".formatted(verificationUrl, verificationToken);
+    }
+
+    private String validity() {
+        return tokenExpirationHours == 1 ? "1 hora" : "%d horas".formatted(tokenExpirationHours);
     }
 }

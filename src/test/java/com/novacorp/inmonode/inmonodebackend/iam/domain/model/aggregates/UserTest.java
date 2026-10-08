@@ -16,6 +16,7 @@ class UserTest {
 
     private static final Instant NOW = Instant.parse("2026-10-07T10:00:00Z");
     private static final Duration COOLDOWN = Duration.ofSeconds(60);
+    private static final Duration LINK_TTL = Duration.ofHours(24);
 
     @Test
     void registerCreatesInactiveUserWithTokenAndEvent() {
@@ -34,12 +35,33 @@ class UserTest {
         var user = User.register("a@mail.com", "hash", Role.BUYER, NOW);
         var token = user.getVerificationToken();
 
-        assertFalse(user.verifyEmail("wrong"));
+        assertFalse(user.verifyEmail("wrong", NOW, LINK_TTL));
         assertFalse(user.isActive());
-        assertTrue(user.verifyEmail(token));
+        assertTrue(user.verifyEmail(token, NOW, LINK_TTL));
         assertTrue(user.isActive());
         assertNull(user.getVerificationToken());
-        assertFalse(user.verifyEmail(token));
+        assertFalse(user.verifyEmail(token, NOW, LINK_TTL));
+    }
+
+    @Test
+    void verificationLinkWorksUntilItsTimeToLiveEnds() {
+        var user = User.register("a@mail.com", "hash", Role.BUYER, NOW);
+
+        assertTrue(user.verifyEmail(user.getVerificationToken(), NOW.plus(LINK_TTL).minusSeconds(1), LINK_TTL));
+    }
+
+    @Test
+    void expiredLinkIsRejectedUntilANewOneIsSent() {
+        var user = User.register("a@mail.com", "hash", Role.BUYER, NOW);
+        var expired = user.getVerificationToken();
+        var dayLater = NOW.plus(LINK_TTL);
+
+        assertFalse(user.verifyEmail(expired, dayLater, LINK_TTL));
+        assertFalse(user.isActive());
+        assertEquals(expired, user.getVerificationToken());
+
+        assertTrue(user.renewVerificationToken(dayLater, COOLDOWN));
+        assertTrue(user.verifyEmail(user.getVerificationToken(), dayLater, LINK_TTL));
     }
 
     @Test
@@ -56,8 +78,8 @@ class UserTest {
         assertEquals(later, user.getVerificationSentAt());
         assertTrue(user.domainEvents().stream().anyMatch(e ->
                 e instanceof VerificationTokenRenewedEvent ev && ev.verificationToken().equals(newToken)));
-        assertFalse(user.verifyEmail(oldToken));
-        assertTrue(user.verifyEmail(newToken));
+        assertFalse(user.verifyEmail(oldToken, later, LINK_TTL));
+        assertTrue(user.verifyEmail(newToken, later, LINK_TTL));
     }
 
     @Test

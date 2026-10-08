@@ -40,6 +40,7 @@ class AuthCommandServiceImplTest {
     private static final Instant NOW = Instant.parse("2026-10-07T10:00:00Z");
     private static final long REFRESH_DAYS = 30;
     private static final long RESEND_COOLDOWN_SECONDS = 60;
+    private static final long VERIFICATION_TOKEN_HOURS = 24;
 
     private final Map<String, User> users = new HashMap<>();
     private final Map<String, RefreshToken> refreshTokens = new HashMap<>();
@@ -85,7 +86,7 @@ class AuthCommandServiceImplTest {
         when(generator.generate()).thenAnswer(i -> "rt-" + generatedTokens.incrementAndGet());
         when(generator.hash(any())).thenAnswer(i -> "sha:" + i.getArgument(0));
         service = new AuthCommandServiceImpl(repository, refreshTokenRepository, hashing, tokens, generator,
-                REFRESH_DAYS, RESEND_COOLDOWN_SECONDS, Clock.fixed(NOW, ZoneOffset.UTC));
+                REFRESH_DAYS, RESEND_COOLDOWN_SECONDS, VERIFICATION_TOKEN_HOURS, Clock.fixed(NOW, ZoneOffset.UTC));
     }
 
     @Test
@@ -161,6 +162,18 @@ class AuthCommandServiceImplTest {
 
         assertEquals(UserStatus.ACTIVE, ((Result.Success<User, ApplicationError>) first).value().getStatus());
         assertEquals("VALIDATION_ERROR", failure(second).code());
+    }
+
+    @Test
+    void expiredVerificationTokenIsRejectedAndTheAccountStaysInactive() {
+        users.put("ana@mail.com",
+                pendingUser(1L, "ana@mail.com", NOW.minus(Duration.ofHours(VERIFICATION_TOKEN_HOURS))));
+
+        var result = service.handle(new VerifyEmailCommand("old-token"));
+
+        assertEquals("VALIDATION_ERROR", failure(result).code());
+        assertEquals(UserStatus.INACTIVE, users.get("ana@mail.com").getStatus());
+        verify(repository, never()).save(any());
     }
 
     @Test
