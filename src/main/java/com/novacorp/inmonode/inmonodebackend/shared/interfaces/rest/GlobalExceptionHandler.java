@@ -5,6 +5,8 @@ import com.novacorp.inmonode.inmonodebackend.shared.interfaces.rest.transform.Er
 import org.jspecify.annotations.NullMarked;
 import org.springframework.context.i18n.LocaleContextHolder;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.AuthenticationException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -62,6 +64,24 @@ public class GlobalExceptionHandler {
                 .orElse(resolveMessageOrDefault("validation.request.failed", "Request validation failed"));
         var applicationError = ApplicationError.validationError("request-body", errorDetails);
         return ErrorResponseAssembler.toErrorResponseFromApplicationError(applicationError);
+    }
+
+    /**
+     * Keeps method-security denials ({@code @PreAuthorize}) as 403 instead of the generic 500 fallback.
+     */
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<?> handleAccessDenied(AccessDeniedException ex) {
+        return ErrorResponseAssembler.toErrorResponseFromApplicationError(
+                new ApplicationError("FORBIDDEN", "The caller is not allowed to perform this operation"));
+    }
+
+    /**
+     * Keeps authentication failures raised inside controllers as 401 instead of the generic 500 fallback.
+     */
+    @ExceptionHandler(AuthenticationException.class)
+    public ResponseEntity<?> handleAuthentication(AuthenticationException ex) {
+        return ErrorResponseAssembler.toErrorResponseFromApplicationError(
+                new ApplicationError("UNAUTHORIZED", "Authentication is required"));
     }
 
     /**

@@ -35,3 +35,11 @@ ENTRYPOINT ["java", "-jar", "app.jar"]
 # - DATABASE_USER: The username for the database connection.
 # - DATABASE_PASSWORD: The password for the database connection.
 # - PORT: The port on which the application will run (default 8080).
+# - JWT_SECRET: The secret used to sign JSON Web Tokens (at least 32 bytes).
+# - JWT_EXPIRATION_SECONDS: The token lifetime in seconds (default 3600).
+# - REFRESH_TOKEN_EXPIRATION_DAYS: The refresh token lifetime in days (default 30).
+# - VERIFICATION_RESEND_COOLDOWN_SECONDS: The minimum wait between verification emails to the same
+#   address (default 60).
+# - VERIFICATION_TOKEN_EXPIRATION_HOURS: How long a verification link works (default 24).
+# - STAFF_{FIELD_AGENT,CATALOG_ADMIN,FINANCE_ADMIN}_EMAIL and ..._PASSWORD_HASH: The initial staff
+#   accounts (BCrypt hashes), inserted by the first startup on an empty database.
