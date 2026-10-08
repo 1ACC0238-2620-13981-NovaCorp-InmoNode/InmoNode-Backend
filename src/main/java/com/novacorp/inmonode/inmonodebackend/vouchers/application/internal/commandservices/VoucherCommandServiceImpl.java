@@ -100,14 +100,14 @@ public class VoucherCommandServiceImpl implements VoucherCommandService {
         return Result.success(new VoucherRegistration(voucher, VoucherRegistration.Result.RECEIVED));
     }
 
-    /** Empty when the reservation is an operation of the authenticated agent. */
+    /** Empty when the reservation is an operation of the caller: the agent who made it or the buyer who requested it. */
     private Optional<ApplicationError> checkOwnership(UUID reservationId) {
-        var agentId = externalIamService.currentAgentId().orElse(null);
-        if (agentId == null) {
-            return Optional.of(new ApplicationError("UNAUTHORIZED", "The agent is not authenticated"));
+        var userId = externalIamService.currentUserId().orElse(null);
+        if (userId == null) {
+            return Optional.of(new ApplicationError("UNAUTHORIZED", "The user is not authenticated"));
         }
         var ownsOperation = operationRepository.findByReservationId(reservationId)
-                .filter(operation -> operation.isOwnedBy(agentId))
+                .filter(operation -> operation.isOwnedBy(userId))
                 .isPresent();
         return ownsOperation
                 ? Optional.empty()

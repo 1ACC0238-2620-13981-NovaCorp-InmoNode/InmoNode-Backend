@@ -51,6 +51,24 @@ public class ReservationOperation {
                 reservedAt, evidenceDueAt);
     }
 
+    /**
+     * A separation a buyer requested from the web portal (US-19, US-20): the buyer is its owner, the only one who may
+     * send its voucher.
+     *
+     * @param reservationId the request's transaction id, shared by every context
+     * @param evidenceDueAt until when the lot waits for the payment evidence: one hour after the request
+     */
+    public static ReservationOperation fromWebRequest(UUID reservationId, Long buyerId, Long lotId,
+                                                      BigDecimal initialAmount, Instant requestedAt,
+                                                      Instant evidenceDueAt) {
+        if (reservationId == null || buyerId == null || lotId == null || initialAmount == null || requestedAt == null
+                || evidenceDueAt == null) {
+            throw new IllegalArgumentException("a web request needs its id, buyer, lot, amount, date and deadline");
+        }
+        return new ReservationOperation(null, reservationId, OperationChannel.WEB, buyerId, lotId, initialAmount,
+                requestedAt, evidenceDueAt);
+    }
+
     /** Rebuilds an already persisted operation. */
     public static ReservationOperation restore(Long id, UUID reservationId, OperationChannel channel, Long ownerId,
                                                Long lotId, BigDecimal initialAmount, Instant reservedAt,

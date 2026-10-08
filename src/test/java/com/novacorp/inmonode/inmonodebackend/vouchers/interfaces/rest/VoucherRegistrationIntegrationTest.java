@@ -278,7 +278,7 @@ class VoucherRegistrationIntegrationTest {
         register(otherAgent, body)
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("RESERVATION_OPERATION_NOT_FOUND"));
-        perform("/api/v1/vouchers", bearer(Role.BUYER, agent), body).andExpect(status().isForbidden());
+        perform("/api/v1/vouchers", bearer(Role.CATALOG_ADMIN, agent), body).andExpect(status().isForbidden());
         mockMvc.perform(post("/api/v1/vouchers").contentType(MediaType.APPLICATION_JSON).content(body))
                 .andExpect(status().isUnauthorized());
         assertTrue(voucherRepository.findByVoucherId(voucher).isEmpty());

@@ -155,11 +155,11 @@ class VoucherUploadUrlIntegrationTest {
     }
 
     @Test
-    void onlyFieldAgentsAskForUploadUrls() throws Exception {
+    void staffOtherThanFieldAgentsCannotAskForUploadUrls() throws Exception {
         var agent = AGENTS.incrementAndGet();
         var body = body(UUID.randomUUID(), operationOf(agent), "image/jpeg", 2048);
 
-        perform(bearer(Role.BUYER, agent), body).andExpect(status().isForbidden());
+        perform(bearer(Role.CATALOG_ADMIN, agent), body).andExpect(status().isForbidden());
         mockMvc.perform(post("/api/v1/vouchers/upload-url").contentType(MediaType.APPLICATION_JSON).content(body))
                 .andExpect(status().isUnauthorized());
     }
