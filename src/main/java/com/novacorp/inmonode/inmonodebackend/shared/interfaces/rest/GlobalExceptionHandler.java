@@ -5,11 +5,13 @@ import com.novacorp.inmonode.inmonodebackend.shared.interfaces.rest.transform.Er
 import org.jspecify.annotations.NullMarked;
 import org.springframework.context.i18n.LocaleContextHolder;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 import java.text.MessageFormat;
 import java.util.MissingResourceException;
@@ -63,6 +65,28 @@ public class GlobalExceptionHandler {
                 .reduce((a, b) -> a+ "; " +b)
                 .orElse(resolveMessageOrDefault("validation.request.failed", "Request validation failed"));
         var applicationError = ApplicationError.validationError("request-body", errorDetails);
+        return ErrorResponseAssembler.toErrorResponseFromApplicationError(applicationError);
+    }
+
+    /**
+     * Keeps a body that is not valid JSON, or has a value of the wrong type, as 400 instead of the generic 500 fallback.
+     */
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<?> handleMessageNotReadable(HttpMessageNotReadableException ex) {
+        var applicationError = ApplicationError.validationError("request-body",
+                resolveMessageOrDefault("validation.request.malformed",
+                        "The request body is not valid JSON or has a value of the wrong type"));
+        return ErrorResponseAssembler.toErrorResponseFromApplicationError(applicationError);
+    }
+
+    /**
+     * Keeps a path or query parameter of the wrong type (e.g. a non-numeric id) as 400 instead of 500.
+     */
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<?> handleArgumentTypeMismatch(MethodArgumentTypeMismatchException ex) {
+        var applicationError = ApplicationError.validationError(ex.getName(),
+                resolveMessageOrDefault("validation.request.parameter-type",
+                        "Parameter %s has an invalid value".formatted(ex.getName()), ex.getName()));
         return ErrorResponseAssembler.toErrorResponseFromApplicationError(applicationError);
     }
 

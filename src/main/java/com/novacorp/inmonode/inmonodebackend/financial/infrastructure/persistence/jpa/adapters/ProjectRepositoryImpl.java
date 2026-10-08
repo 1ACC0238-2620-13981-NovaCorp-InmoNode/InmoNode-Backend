@@ -31,4 +31,9 @@ public class ProjectRepositoryImpl implements ProjectRepository {
     public Optional<Project> findById(Long id) {
         return jpaRepository.findById(id).map(ProjectEntityAssembler::toDomain);
     }
+
+    @Override
+    public boolean existsById(Long id) {
+        return jpaRepository.existsById(id);
+    }
 }
