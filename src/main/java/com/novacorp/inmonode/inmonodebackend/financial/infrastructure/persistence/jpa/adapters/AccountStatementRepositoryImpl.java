@@ -47,6 +47,13 @@ public class AccountStatementRepositoryImpl implements AccountStatementRepositor
     }
 
     @Override
+    public List<AccountStatement> findByBuyerId(Long buyerId) {
+        return jpaRepository.findByBuyerIdOrderByOpenedAtAscIdAsc(buyerId).stream()
+                .map(AccountStatementEntityAssembler::toDomain)
+                .toList();
+    }
+
+    @Override
     public List<Long> findIdsToReview(LocalDate asOfDate, int reminderDays) {
         return jpaRepository.findIdsToReview(asOfDate, asOfDate.plusDays(reminderDays), InstallmentStatus.PENDING,
                 InstallmentStatus.OVERDUE);

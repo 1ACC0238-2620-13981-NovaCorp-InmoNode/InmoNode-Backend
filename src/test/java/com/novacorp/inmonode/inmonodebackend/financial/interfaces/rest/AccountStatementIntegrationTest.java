@@ -263,6 +263,69 @@ class AccountStatementIntegrationTest {
                 .andExpect(jsonPath("$.installments[0].status").value("PENDING"));
     }
 
+    @Test
+    void aBuyerSeesAllTheirLotsConsolidated() throws Exception {
+        var buyer = BUYERS.incrementAndGet();
+        var firstLot = lot();
+        var first = separate(buyer, firstLot, quote(buyer, firstLot));
+        approve(sendVoucher(first));
+        acknowledge(buyer, issue(buyer, first)).andExpect(status().isOk());
+        var secondLot = lot();
+        var second = separate(buyer, secondLot, quote(buyer, secondLot));
+        approve(sendVoucher(second));
+        acknowledge(buyer, issue(buyer, second)).andExpect(status().isOk());
+        pay(statementIdOf(buyer, first), 1, "{\"amount\": 3198.56}").andExpect(status().isOk());
+
+        mine(buyer)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totals", hasSize(1)))
+                .andExpect(jsonPath("$.totals[0].currency").value("PEN"))
+                .andExpect(jsonPath("$.totals[0].lots").value(2))
+                .andExpect(jsonPath("$.totals[0].invested").value(21198.56))
+                .andExpect(jsonPath("$.totals[0].debt").value(73566.76))
+                .andExpect(jsonPath("$.totals[0].progressPercentage").value(22.37))
+                .andExpect(jsonPath("$.statements", hasSize(2)))
+                .andExpect(jsonPath("$.statements[0].transactionId").value(first.toString()))
+                .andExpect(jsonPath("$.statements[0].projectId").value(firstLot.getProjectId()))
+                .andExpect(jsonPath("$.statements[0].projectName").value("Estados de cuenta"))
+                .andExpect(jsonPath("$.statements[0].lotId").value(firstLot.getId()))
+                .andExpect(jsonPath("$.statements[0].lotCode").value("E-01"))
+                .andExpect(jsonPath("$.statements[0].lotPrice").value(45000.00))
+                .andExpect(jsonPath("$.statements[0].paidAmount").value(12198.56))
+                .andExpect(jsonPath("$.statements[0].balance").value(35184.10))
+                .andExpect(jsonPath("$.statements[0].overdueInstallments").value(0))
+                .andExpect(jsonPath("$.statements[0].nextInstallment.number").value(2))
+                .andExpect(jsonPath("$.statements[0].nextInstallment.amountDue").value(3198.56))
+                .andExpect(jsonPath("$.statements[0].nextInstallment.status").value("PENDING"))
+                .andExpect(jsonPath("$.statements[0].dueSoon").value(false))
+                .andExpect(jsonPath("$.statements[0].fullyPaid").value(false))
+                .andExpect(jsonPath("$.statements[1].transactionId").value(second.toString()))
+                .andExpect(jsonPath("$.statements[1].lotId").value(secondLot.getId()))
+                .andExpect(jsonPath("$.statements[1].paidAmount").value(9000.00))
+                .andExpect(jsonPath("$.statements[1].progressPercentage").value(18.99))
+                .andExpect(jsonPath("$.statements[1].nextInstallment.number").value(1));
+    }
+
+    @Test
+    void theConsolidatedViewOnlyShowsTheCallersLots() throws Exception {
+        var buyer = BUYERS.incrementAndGet();
+        var otherBuyer = BUYERS.incrementAndGet();
+        var lot = lot();
+        var transactionId = separate(buyer, lot, quote(buyer, lot));
+        approve(sendVoucher(transactionId));
+        acknowledge(buyer, issue(buyer, transactionId)).andExpect(status().isOk());
+
+        mine(otherBuyer)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totals", hasSize(0)))
+                .andExpect(jsonPath("$.statements", hasSize(0)));
+        mine(buyer).andExpect(jsonPath("$.statements", hasSize(1)));
+        mockMvc.perform(get("/api/v1/account-statements")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(Role.FINANCE_ADMIN, 77L)))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(get("/api/v1/account-statements")).andExpect(status().isUnauthorized());
+    }
+
     /** Web reservations made before the plan was kept have nothing to schedule: the agreement still works. */
     @Test
     void aReservationWithoutPlanIsAgreedWithoutStatement() throws Exception {
@@ -289,6 +352,11 @@ class AccountStatementIntegrationTest {
 
     private ResultActions statementOf(long buyer, UUID transactionId) throws Exception {
         return mockMvc.perform(get("/api/v1/reservations/{id}/account-statement", transactionId)
+                .header(HttpHeaders.AUTHORIZATION, bearer(Role.BUYER, buyer)));
+    }
+
+    private ResultActions mine(long buyer) throws Exception {
+        return mockMvc.perform(get("/api/v1/account-statements")
                 .header(HttpHeaders.AUTHORIZATION, bearer(Role.BUYER, buyer)));
     }
 

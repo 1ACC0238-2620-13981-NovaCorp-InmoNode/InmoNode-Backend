@@ -23,6 +23,9 @@ public interface AccountStatementRepository {
 
     Optional<AccountStatement> findByReservationId(Long reservationId);
 
+    /** Every statement of the buyer, oldest first (US-27). */
+    List<AccountStatement> findByBuyerId(Long buyerId);
+
     /**
      * Ids of the statements with something to do in the daily review on {@code asOfDate} (US-24): a pending
      * installment past due or due within {@code reminderDays} days and not reminded, or an overdue one not notified.

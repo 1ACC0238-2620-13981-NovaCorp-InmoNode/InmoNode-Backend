@@ -16,6 +16,8 @@ public interface AccountStatementJpaRepository extends JpaRepository<AccountStat
 
     Optional<AccountStatementEntity> findByReservationId(Long reservationId);
 
+    List<AccountStatementEntity> findByBuyerIdOrderByOpenedAtAscIdAsc(Long buyerId);
+
     @Query("""
             select distinct i.accountStatement.id from InstallmentEntity i
             where (i.status = :pending and (i.dueDate < :asOfDate

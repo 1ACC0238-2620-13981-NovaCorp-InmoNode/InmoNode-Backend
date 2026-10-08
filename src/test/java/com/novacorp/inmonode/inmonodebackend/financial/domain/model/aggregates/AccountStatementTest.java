@@ -188,6 +188,7 @@ class AccountStatementTest {
         var overdue = statement.markOverdueInstallments(LocalDate.parse("2027-01-10"), BigDecimal.ZERO);
 
         assertEquals(List.of(2, 3), overdue.stream().map(Installment::getNumber).toList());
+        assertEquals(2, statement.overdueInstallmentCount());
         assertEquals(InstallmentStatus.PAID, statement.findInstallment(1).orElseThrow().getStatus());
         assertEquals(new BigDecimal("0.00"), statement.findInstallment(2).orElseThrow().getPenalty(),
                 "a project without late fee");

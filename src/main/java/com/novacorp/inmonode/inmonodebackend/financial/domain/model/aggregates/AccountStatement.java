@@ -1,6 +1,7 @@
 package com.novacorp.inmonode.inmonodebackend.financial.domain.model.aggregates;
 
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.entities.Installment;
+import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.InstallmentStatus;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.services.AmortizationSchedule;
 import org.jspecify.annotations.Nullable;
 
@@ -125,6 +126,12 @@ public class AccountStatement {
         var paid = paidAmount();
         var total = paid.add(balance());
         return paid.multiply(ONE_HUNDRED).divide(total, 2, RoundingMode.HALF_UP);
+    }
+
+    /** US-27: how many installments are overdue, waiting with their late fee. */
+    public int overdueInstallmentCount() {
+        return (int) installments.stream().filter(installment -> installment.getStatus() == InstallmentStatus.OVERDUE)
+                .count();
     }
 
     public boolean isFullyPaid() {
