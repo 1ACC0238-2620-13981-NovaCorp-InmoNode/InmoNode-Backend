@@ -17,7 +17,8 @@ public final class LotEntityAssembler {
         return Lot.restore(entity.getId(), entity.getProjectId(), entity.getCode(),
                 new LotDimensions(entity.getArea(), entity.getFront(), entity.getDepth()),
                 new Money(entity.getPriceAmount(), entity.getPriceCurrency()),
-                LotBoundary.fromWkt(entity.getBoundaryWkt()), entity.getStatus());
+                LotBoundary.fromWkt(entity.getBoundaryWkt()), entity.getStatus(),
+                entity.getCurrentReservationId(), entity.getBlockedUntil());
     }
 
     /** Copies the aggregate state onto the entity; audit columns and id stay untouched. */
@@ -31,6 +32,8 @@ public final class LotEntityAssembler {
         entity.setPriceCurrency(lot.getPrice().currency());
         entity.setStatus(lot.getStatus());
         entity.setBoundaryWkt(lot.getBoundary().toWkt());
+        entity.setCurrentReservationId(lot.getCurrentReservationId());
+        entity.setBlockedUntil(lot.getBlockedUntil());
         return entity;
     }
 }

@@ -2,13 +2,17 @@ package com.novacorp.inmonode.inmonodebackend.financial.infrastructure.persisten
 
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.LotStatus;
 import com.novacorp.inmonode.inmonodebackend.financial.infrastructure.persistence.jpa.entities.LotEntity;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
 public interface LotJpaRepository extends JpaRepository<LotEntity, Long> {
@@ -21,6 +25,14 @@ public interface LotJpaRepository extends JpaRepository<LotEntity, Long> {
     List<LotEntity> findByProjectIdOrderByCodeAsc(Long projectId);
 
     List<LotEntity> findByProjectIdInOrderByProjectIdAscCodeAsc(Collection<Long> projectIds);
+
+    /** {@code SELECT ... FOR UPDATE}: must run inside the caller's read-write transaction. */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select l from LotEntity l where l.id = :id")
+    Optional<LotEntity> findByIdForUpdate(@Param("id") Long id);
+
+    @Query("select l from LotEntity l where l.status = :blocked and l.blockedUntil <= :now")
+    List<LotEntity> findExpiredBlocks(@Param("blocked") LotStatus blocked, @Param("now") Instant now);
 
     @Query("""
             select l.projectId as projectId,

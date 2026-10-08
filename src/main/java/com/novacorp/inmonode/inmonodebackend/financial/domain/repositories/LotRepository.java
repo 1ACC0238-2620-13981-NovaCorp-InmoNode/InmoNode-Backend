@@ -3,9 +3,11 @@ package com.novacorp.inmonode.inmonodebackend.financial.domain.repositories;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.aggregates.Lot;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.LotStatistics;
 
+import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -17,6 +19,17 @@ public interface LotRepository {
      * @return the persisted lots, with their generated ids
      */
     List<Lot> saveAll(List<Lot> lots);
+
+    Lot save(Lot lot);
+
+    /**
+     * Reads the lot and locks it until the current transaction ends, so concurrent reservations of the same lot
+     * are decided one after the other: the first to reach the server wins (US-12).
+     */
+    Optional<Lot> findByIdForUpdate(Long id);
+
+    /** Lots whose block ran out at {@code now}, still waiting to be released. */
+    List<Lot> findWithExpiredBlock(Instant now);
 
     /** Codes already used in the project, to reject duplicates before saving. */
     Set<String> findCodesByProjectId(Long projectId);
