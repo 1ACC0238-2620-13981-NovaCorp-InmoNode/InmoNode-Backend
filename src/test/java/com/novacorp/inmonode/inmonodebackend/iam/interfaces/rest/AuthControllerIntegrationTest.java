@@ -123,6 +123,23 @@ class AuthControllerIntegrationTest {
     }
 
     @Test
+    void logoutEndsTheSessionAndAlwaysAnswersNoContent() throws Exception {
+        var email = uniqueEmail();
+        register(email).andExpect(status().isCreated());
+        verifyEmail(capturedVerificationToken(email)).andExpect(status().isOk());
+        var refreshToken = refreshTokenOf(login(email, PASSWORD).andExpect(status().isOk()));
+
+        logout(refreshToken).andExpect(status().isNoContent());
+
+        refresh(refreshToken)
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("INVALID_REFRESH_TOKEN"));
+        logout(refreshToken).andExpect(status().isNoContent());
+        logout("not-a-refresh-token").andExpect(status().isNoContent());
+        logout("").andExpect(status().isBadRequest());
+    }
+
+    @Test
     void refreshWithUnknownOrBlankTokenIsRejected() throws Exception {
         refresh("not-a-refresh-token")
                 .andExpect(status().isUnauthorized())
@@ -183,6 +200,11 @@ class AuthControllerIntegrationTest {
 
     private ResultActions refresh(String refreshToken) throws Exception {
         return postJson("/api/v1/auth/refresh", """
+                {"refreshToken": "%s"}""".formatted(refreshToken));
+    }
+
+    private ResultActions logout(String refreshToken) throws Exception {
+        return postJson("/api/v1/auth/logout", """
                 {"refreshToken": "%s"}""".formatted(refreshToken));
     }
 

@@ -8,6 +8,7 @@ import com.novacorp.inmonode.inmonodebackend.iam.domain.model.aggregates.User;
 import com.novacorp.inmonode.inmonodebackend.iam.domain.model.commands.RefreshTokenCommand;
 import com.novacorp.inmonode.inmonodebackend.iam.domain.model.commands.RegisterUserCommand;
 import com.novacorp.inmonode.inmonodebackend.iam.domain.model.commands.SignInCommand;
+import com.novacorp.inmonode.inmonodebackend.iam.domain.model.commands.SignOutCommand;
 import com.novacorp.inmonode.inmonodebackend.iam.domain.model.commands.VerifyEmailCommand;
 import com.novacorp.inmonode.inmonodebackend.iam.domain.model.valueobjects.AuthTokens;
 import com.novacorp.inmonode.inmonodebackend.iam.domain.model.valueobjects.Role;
@@ -127,6 +128,17 @@ public class AuthCommandServiceImpl implements AuthCommandService {
         presented.revoke(now);
         refreshTokenRepository.save(presented);
         return Result.success(issueTokens(user, now));
+    }
+
+    @Override
+    @Transactional
+    public void handle(SignOutCommand command) {
+        refreshTokenRepository.findByTokenHash(refreshTokenGenerator.hash(command.refreshToken()))
+                .filter(token -> !token.isRevoked())
+                .ifPresent(token -> {
+                    token.revoke(clock.instant());
+                    refreshTokenRepository.save(token);
+                });
     }
 
     private AuthTokens issueTokens(User user, Instant now) {

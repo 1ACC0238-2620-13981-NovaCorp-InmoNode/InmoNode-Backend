@@ -8,6 +8,7 @@ import com.novacorp.inmonode.inmonodebackend.iam.domain.model.aggregates.User;
 import com.novacorp.inmonode.inmonodebackend.iam.domain.model.commands.RefreshTokenCommand;
 import com.novacorp.inmonode.inmonodebackend.iam.domain.model.commands.RegisterUserCommand;
 import com.novacorp.inmonode.inmonodebackend.iam.domain.model.commands.SignInCommand;
+import com.novacorp.inmonode.inmonodebackend.iam.domain.model.commands.SignOutCommand;
 import com.novacorp.inmonode.inmonodebackend.iam.domain.model.commands.VerifyEmailCommand;
 import com.novacorp.inmonode.inmonodebackend.iam.domain.model.valueobjects.AuthTokens;
 import com.novacorp.inmonode.inmonodebackend.iam.domain.model.valueobjects.Role;
@@ -205,6 +206,29 @@ class AuthCommandServiceImplTest {
 
         assertEquals("INVALID_REFRESH_TOKEN", failure(service.handle(new RefreshTokenCommand("rt-1"))).code());
         assertFalse(refreshTokens.get("sha:rt-1").isRevoked());
+    }
+
+    @Test
+    void signOutRevokesOnlyThePresentedToken() {
+        signedInUser();
+        success(service.handle(new SignInCommand("ana@mail.com", "secret123")));
+
+        service.handle(new SignOutCommand("rt-1"));
+
+        assertEquals(NOW, refreshTokens.get("sha:rt-1").getRevokedAt());
+        assertFalse(refreshTokens.get("sha:rt-2").isRevoked());
+        assertEquals("INVALID_REFRESH_TOKEN", failure(service.handle(new RefreshTokenCommand("rt-1"))).code());
+    }
+
+    @Test
+    void signOutIgnoresUnknownAndAlreadyRevokedTokens() {
+        signedInUser();
+        service.handle(new SignOutCommand("rt-1"));
+
+        assertDoesNotThrow(() -> service.handle(new SignOutCommand("rt-1")));
+        assertDoesNotThrow(() -> service.handle(new SignOutCommand("unknown")));
+        verify(refreshTokenRepository, never()).revokeAllActiveByUserId(anyLong(), any());
+        verify(refreshTokenRepository, times(2)).save(any());
     }
 
     /** An active user with id 1 who signed in and holds refresh token "rt-1". */

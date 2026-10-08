@@ -4,6 +4,7 @@ import com.novacorp.inmonode.inmonodebackend.iam.domain.model.aggregates.User;
 import com.novacorp.inmonode.inmonodebackend.iam.domain.model.commands.RefreshTokenCommand;
 import com.novacorp.inmonode.inmonodebackend.iam.domain.model.commands.RegisterUserCommand;
 import com.novacorp.inmonode.inmonodebackend.iam.domain.model.commands.SignInCommand;
+import com.novacorp.inmonode.inmonodebackend.iam.domain.model.commands.SignOutCommand;
 import com.novacorp.inmonode.inmonodebackend.iam.domain.model.commands.VerifyEmailCommand;
 import com.novacorp.inmonode.inmonodebackend.iam.domain.model.valueobjects.AuthTokens;
 import com.novacorp.inmonode.inmonodebackend.shared.application.result.ApplicationError;
@@ -28,4 +29,10 @@ public interface AuthCommandService {
      * token that was already revoked revokes every refresh token of its user.
      */
     Result<AuthTokens, ApplicationError> handle(RefreshTokenCommand command);
+
+    /**
+     * Revokes the refresh token. Idempotent and silent: an unknown or already revoked token is
+     * ignored, so the outcome reveals nothing about the token.
+     */
+    void handle(SignOutCommand command);
 }

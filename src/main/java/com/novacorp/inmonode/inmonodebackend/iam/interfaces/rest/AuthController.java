@@ -3,6 +3,7 @@ package com.novacorp.inmonode.inmonodebackend.iam.interfaces.rest;
 import com.novacorp.inmonode.inmonodebackend.iam.domain.model.commands.RefreshTokenCommand;
 import com.novacorp.inmonode.inmonodebackend.iam.domain.model.commands.RegisterUserCommand;
 import com.novacorp.inmonode.inmonodebackend.iam.domain.model.commands.SignInCommand;
+import com.novacorp.inmonode.inmonodebackend.iam.domain.model.commands.SignOutCommand;
 import com.novacorp.inmonode.inmonodebackend.iam.domain.model.commands.VerifyEmailCommand;
 import com.novacorp.inmonode.inmonodebackend.iam.domain.services.AuthCommandService;
 import com.novacorp.inmonode.inmonodebackend.iam.interfaces.rest.resources.RefreshTokenResource;
@@ -57,6 +58,15 @@ public class AuthController {
         var result = authCommandService.handle(new RefreshTokenCommand(resource.refreshToken()));
         return ResponseEntityAssembler.toResponseEntityFromResult(
                 result, TokenResourceAssembler::toResourceFromAuthTokens, HttpStatus.OK);
+    }
+
+    @PostMapping("/logout")
+    @Operation(summary = "Sign out by revoking the refresh token",
+            description = "Always 204, even for an unknown or already revoked token. The access token stays "
+                    + "valid until it expires, so the client must discard it too.")
+    public ResponseEntity<Void> logout(@Valid @RequestBody RefreshTokenResource resource) {
+        authCommandService.handle(new SignOutCommand(resource.refreshToken()));
+        return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/verify-email")
