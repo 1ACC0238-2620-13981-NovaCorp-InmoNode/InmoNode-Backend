@@ -33,6 +33,11 @@ public class UserRepositoryImpl implements UserRepository {
     }
 
     @Override
+    public Optional<User> findById(Long id) {
+        return jpaRepository.findById(id).map(UserEntityAssembler::toDomain);
+    }
+
+    @Override
     public Optional<User> findByEmail(String email) {
         return jpaRepository.findByEmail(email).map(UserEntityAssembler::toDomain);
     }
