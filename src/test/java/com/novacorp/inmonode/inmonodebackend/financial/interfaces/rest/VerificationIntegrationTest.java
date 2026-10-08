@@ -282,7 +282,7 @@ class VerificationIntegrationTest {
     private UUID webReservation(Lot lot) {
         var transactionId = UUID.randomUUID();
         var block = lotAvailabilityFacade.blockLot(transactionId, lot.getId(), BUYER, new BigDecimal("9000"), "PEN",
-                Instant.now());
+                12, new BigDecimal("12"), Instant.now());
         assertEquals("BLOCKED", block.result());
         return transactionId;
     }

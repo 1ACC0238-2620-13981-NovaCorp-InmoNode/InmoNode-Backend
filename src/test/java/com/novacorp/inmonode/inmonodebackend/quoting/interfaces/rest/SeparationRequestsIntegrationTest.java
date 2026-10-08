@@ -117,6 +117,11 @@ class SeparationRequestsIntegrationTest {
         assertEquals(ReservationStatus.BLOCKED, reservation.getStatus());
         assertEquals(buyer, reservation.getRequesterId());
         assertEquals(new Money(new BigDecimal("9000"), "PEN"), reservation.getInitialAmount());
+        var plan = reservation.getFinancingPlan();
+        assertNotNull(plan, "financial keeps the quotation terms");
+        assertEquals(12, plan.termMonths());
+        assertEquals(new BigDecimal("12.000"), plan.annualInterestRate());
+        assertEquals(new Money(new BigDecimal("45000"), "PEN"), plan.lotPrice());
         var blocked = reload(lot);
         assertEquals(LotStatus.BLOCKED, blocked.getStatus());
         assertEquals(reservation.getId(), blocked.getCurrentReservationId());

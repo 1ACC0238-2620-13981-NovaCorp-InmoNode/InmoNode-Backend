@@ -9,6 +9,7 @@ import com.novacorp.inmonode.inmonodebackend.financial.domain.model.commands.Rel
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.commands.RequestWebReservationCommand;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.entities.PaymentEvidence;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.FieldReservationOutcome;
+import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.FinancingPlan;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.FieldReservationOutcome.ConflictReason;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.LotStatus;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.ReservationChannel;
@@ -101,8 +102,10 @@ public class ReservationCommandServiceImpl implements ReservationCommandService 
         if (!lot.isAvailable(now)) {
             return WebReservationOutcome.unavailable();
         }
+        // The plan applies the quotation terms to the price the lot has now, under the lock.
+        var plan = new FinancingPlan(lot.getPrice(), command.termMonths(), command.annualInterestRate());
         var reservation = reservationRepository.save(Reservation.fromWebRequest(command.lotId(), command.buyerId(),
-                command.sourceEventId(), command.initialAmount(), command.requestedAt()));
+                command.sourceEventId(), command.initialAmount(), plan, command.requestedAt()));
         lot.block(Objects.requireNonNull(reservation.getId()), now, ReservationChannel.WEB.blockValidity());
         var blocked = lotRepository.save(lot);
         return WebReservationOutcome.blocked(reservation, Objects.requireNonNull(blocked.getBlockedUntil()));

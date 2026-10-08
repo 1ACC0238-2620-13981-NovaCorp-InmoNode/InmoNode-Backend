@@ -1,6 +1,7 @@
 package com.novacorp.inmonode.inmonodebackend.financial.domain.model.aggregates;
 
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.entities.PaymentEvidence;
+import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.FinancingPlan;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.Money;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.PaymentEvidenceSource;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.PaymentEvidenceStatus;
@@ -23,6 +24,8 @@ class ReservationTest {
     private static final Money AMOUNT = Money.of(new BigDecimal("1500"));
     private static final UUID PROSPECT = UUID.randomUUID();
     private static final UUID SOURCE = UUID.randomUUID();
+    private static final FinancingPlan PLAN = new FinancingPlan(Money.of(new BigDecimal("45000")), 12,
+            new BigDecimal("12"));
 
     @Test
     void fieldReservationHoldsTheLotAndKeepsTheDeviceIds() {
@@ -40,7 +43,7 @@ class ReservationTest {
 
     @Test
     void webRequestHoldsTheLotForTheBuyerWithoutAProspect() {
-        var reservation = Reservation.fromWebRequest(3L, 41L, SOURCE, AMOUNT, RESERVED_AT);
+        var reservation = Reservation.fromWebRequest(3L, 41L, SOURCE, AMOUNT, PLAN, RESERVED_AT);
 
         assertEquals(ReservationStatus.BLOCKED, reservation.getStatus());
         assertEquals(ReservationChannel.WEB, reservation.getChannel());
@@ -52,9 +55,25 @@ class ReservationTest {
         assertEquals(RESERVED_AT, reservation.getReservedAt());
         assertTrue(reservation.getEvidences().isEmpty());
         assertThrows(IllegalArgumentException.class,
-                () -> Reservation.fromWebRequest(3L, 41L, null, AMOUNT, RESERVED_AT));
+                () -> Reservation.fromWebRequest(3L, 41L, null, AMOUNT, PLAN, RESERVED_AT));
         assertThrows(IllegalArgumentException.class,
-                () -> Reservation.fromWebRequest(3L, null, SOURCE, AMOUNT, RESERVED_AT));
+                () -> Reservation.fromWebRequest(3L, null, SOURCE, AMOUNT, PLAN, RESERVED_AT));
+    }
+
+    @Test
+    void aWebRequestKeepsTheFinancingPlanAndAFieldReservationHasNone() {
+        var web = Reservation.fromWebRequest(3L, 41L, SOURCE, AMOUNT, PLAN, RESERVED_AT);
+
+        assertEquals(PLAN, web.getFinancingPlan());
+        assertEquals(new BigDecimal("12.000"), web.getFinancingPlan().annualInterestRate());
+        assertNull(Reservation.fromFieldSync(3L, 7L, PROSPECT, SOURCE, AMOUNT, RESERVED_AT).getFinancingPlan());
+        assertThrows(IllegalArgumentException.class,
+                () -> Reservation.fromWebRequest(3L, 41L, SOURCE, Money.of(new BigDecimal("45000")), PLAN, RESERVED_AT),
+                "the down payment cannot cover the whole price");
+        assertThrows(IllegalArgumentException.class,
+                () -> new FinancingPlan(Money.of(new BigDecimal("45000")), 0, BigDecimal.TEN));
+        assertThrows(IllegalArgumentException.class,
+                () -> new FinancingPlan(Money.of(new BigDecimal("45000")), 12, new BigDecimal("-1")));
     }
 
     @Test

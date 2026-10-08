@@ -2,9 +2,11 @@ package com.novacorp.inmonode.inmonodebackend.financial.infrastructure.persisten
 
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.aggregates.Reservation;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.entities.PaymentEvidence;
+import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.FinancingPlan;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.Money;
 import com.novacorp.inmonode.inmonodebackend.financial.infrastructure.persistence.jpa.entities.PaymentEvidenceEntity;
 import com.novacorp.inmonode.inmonodebackend.financial.infrastructure.persistence.jpa.entities.ReservationEntity;
+import org.jspecify.annotations.Nullable;
 
 import java.util.Set;
 import java.util.UUID;
@@ -24,7 +26,15 @@ public final class ReservationEntityAssembler {
                 new Money(entity.getInitialAmount(), entity.getInitialAmountCurrency()),
                 entity.getReservedAt(), entity.getStatus(),
                 entity.getEvidences().stream().map(ReservationEntityAssembler::toDomain).toList(),
-                entity.getVerifiedAt());
+                entity.getVerifiedAt(), toFinancingPlan(entity));
+    }
+
+    private static @Nullable FinancingPlan toFinancingPlan(ReservationEntity entity) {
+        if (entity.getLotPrice() == null || entity.getTermMonths() == null || entity.getAnnualInterestRate() == null) {
+            return null;
+        }
+        return new FinancingPlan(new Money(entity.getLotPrice(), entity.getInitialAmountCurrency()),
+                entity.getTermMonths(), entity.getAnnualInterestRate());
     }
 
     /**
@@ -42,6 +52,10 @@ public final class ReservationEntityAssembler {
         entity.setStatus(reservation.getStatus());
         entity.setReservedAt(reservation.getReservedAt());
         entity.setVerifiedAt(reservation.getVerifiedAt());
+        var plan = reservation.getFinancingPlan();
+        entity.setLotPrice(plan == null ? null : plan.lotPrice().amount());
+        entity.setTermMonths(plan == null ? null : plan.termMonths());
+        entity.setAnnualInterestRate(plan == null ? null : plan.annualInterestRate());
         copyEvidencesToEntity(reservation, entity);
         return entity;
     }

@@ -247,7 +247,7 @@ class ContractIssuingIntegrationTest {
     private UUID webReservation(Lot lot) {
         var transactionId = UUID.randomUUID();
         assertEquals("BLOCKED", lotAvailabilityFacade.blockLot(transactionId, lot.getId(), BUYER,
-                new BigDecimal("9000"), "PEN", Instant.now()).result());
+                new BigDecimal("9000"), "PEN", 12, new BigDecimal("12"), Instant.now()).result());
         return transactionId;
     }
 
