@@ -59,6 +59,8 @@ public class ReservationEntity extends AuditableAbstractPersistenceEntity {
     @Column(nullable = false)
     private Instant reservedAt;
 
+    private Instant verifiedAt;
+
     /** A reservation receives few evidences and needs them all to be rebuilt, so they are loaded with it. */
     @OneToMany(mappedBy = "reservation", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
     @OrderBy("id")

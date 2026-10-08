@@ -132,6 +132,84 @@ class ReservationTest {
     }
 
     @Test
+    void approvingTheEvidenceUnderReviewVerifiesTheReservation() {
+        var reservation = Reservation.fromFieldSync(3L, 7L, PROSPECT, SOURCE, AMOUNT, RESERVED_AT);
+        var evidence = voucherEvidence();
+        reservation.attachEvidence(evidence);
+        var now = RESERVED_AT.plusSeconds(7200);
+
+        reservation.verify(evidence.getReference(), 77L, "conciliado", now);
+
+        assertEquals(ReservationStatus.VERIFIED, reservation.getStatus());
+        assertEquals(now, reservation.getVerifiedAt());
+        var approved = reservation.findEvidence(evidence.getReference()).orElseThrow();
+        assertEquals(PaymentEvidenceStatus.APPROVED, approved.getStatus());
+        assertEquals(77L, approved.getReviewerId());
+        assertEquals("conciliado", approved.getReviewerNote());
+        assertThrows(IllegalStateException.class,
+                () -> reservation.verify(evidence.getReference(), 77L, null, now), "decided only once");
+    }
+
+    @Test
+    void onlyAReservationWaitingForVerificationIsVerifiedWithAnEvidenceOnTime() {
+        var blocked = Reservation.fromFieldSync(3L, 7L, PROSPECT, SOURCE, AMOUNT, RESERVED_AT);
+        assertThrows(IllegalStateException.class,
+                () -> blocked.verify(UUID.randomUUID(), 77L, null, RESERVED_AT), "no such evidence");
+
+        var expired = Reservation.fromFieldSync(3L, 7L, PROSPECT, SOURCE, AMOUNT, RESERVED_AT);
+        expired.expire();
+        var late = voucherEvidence();
+        expired.attachEvidence(late);
+        assertThrows(IllegalStateException.class,
+                () -> expired.verify(late.getReference(), 77L, null, RESERVED_AT));
+        assertEquals(ReservationStatus.EXPIRED, expired.getStatus());
+    }
+
+    @Test
+    void rejectingTheOnlyEvidenceUnderReviewWaitsForASubstituteAgain() {
+        var reservation = Reservation.fromFieldSync(3L, 7L, PROSPECT, SOURCE, AMOUNT, RESERVED_AT);
+        var evidence = voucherEvidence();
+        reservation.attachEvidence(evidence);
+
+        assertTrue(reservation.rejectEvidence(evidence.getReference(), 77L, "Voucher ilegible", RESERVED_AT));
+
+        assertEquals(ReservationStatus.BLOCKED, reservation.getStatus());
+        var rejected = reservation.findEvidence(evidence.getReference()).orElseThrow();
+        assertEquals(PaymentEvidenceStatus.REJECTED, rejected.getStatus());
+        assertEquals("Voucher ilegible", rejected.getReviewerNote());
+        var substitute = voucherEvidence();
+        assertTrue(reservation.attachEvidence(substitute), "the substitute arrives on time");
+        assertEquals(ReservationStatus.PENDING_VERIFICATION, reservation.getStatus());
+    }
+
+    @Test
+    void rejectingOneEvidenceKeepsTheReviewWhileAnotherIsPending() {
+        var reservation = Reservation.fromFieldSync(3L, 7L, PROSPECT, SOURCE, AMOUNT, RESERVED_AT);
+        var first = voucherEvidence();
+        var second = voucherEvidence();
+        reservation.attachEvidence(first);
+        reservation.attachEvidence(second);
+
+        assertFalse(reservation.rejectEvidence(first.getReference(), 77L, "Duplicado", RESERVED_AT));
+
+        assertEquals(ReservationStatus.PENDING_VERIFICATION, reservation.getStatus());
+    }
+
+    @Test
+    void rejectingALateEvidenceLeavesTheReservationAsItIs() {
+        var expired = Reservation.fromFieldSync(3L, 7L, PROSPECT, SOURCE, AMOUNT, RESERVED_AT);
+        expired.expire();
+        var late = voucherEvidence();
+        expired.attachEvidence(late);
+
+        assertFalse(expired.rejectEvidence(late.getReference(), 77L, "Llegó tarde", RESERVED_AT));
+
+        assertEquals(ReservationStatus.EXPIRED, expired.getStatus());
+        assertEquals(PaymentEvidenceStatus.REJECTED,
+                expired.findEvidence(late.getReference()).orElseThrow().getStatus());
+    }
+
+    @Test
     void aVoucherEvidenceNeedsItsDataAndItsFile() {
         var day = LocalDate.parse("2026-10-08");
         assertThrows(IllegalArgumentException.class, () -> PaymentEvidence.fromVoucher(null, AMOUNT, day, "OP-1",

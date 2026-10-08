@@ -113,6 +113,39 @@ public class Lot {
     }
 
     /**
+     * The payment evidence of the reservation waiting for verification was approved: the lot is reserved for it and
+     * no longer offered.
+     *
+     * @return {@code false} when the lot is not waiting for that reservation's verification, so it stays as it was
+     */
+    public boolean markReserved(Long reservationId) {
+        if (!isWaitingForVerificationOf(reservationId)) {
+            return false;
+        }
+        status = LotStatus.RESERVED;
+        return true;
+    }
+
+    /**
+     * The payment evidence under review was rejected: the lot is held again for the same reservation, for a new
+     * window, while a substitute voucher arrives (US-25). If none arrives, the block runs out as any other.
+     *
+     * @return {@code false} when the lot is not waiting for that reservation's verification, so it stays as it was
+     */
+    public boolean reopenBlock(Long reservationId, Instant now, Duration validity) {
+        if (!isWaitingForVerificationOf(reservationId)) {
+            return false;
+        }
+        status = LotStatus.BLOCKED;
+        blockedUntil = now.plus(validity);
+        return true;
+    }
+
+    private boolean isWaitingForVerificationOf(Long reservationId) {
+        return status == LotStatus.PENDING_VERIFICATION && reservationId.equals(currentReservationId);
+    }
+
+    /**
      * Makes the lot available again when its block ran out without payment evidence.
      *
      * @return the reservation that held the expired block; empty when the lot had no expired block

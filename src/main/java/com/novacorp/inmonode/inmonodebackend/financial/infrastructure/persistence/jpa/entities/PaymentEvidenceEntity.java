@@ -65,4 +65,11 @@ public class PaymentEvidenceEntity extends AuditableAbstractPersistenceEntity {
 
     @Column(nullable = false)
     private Instant submittedAt;
+
+    private Long reviewerId;
+
+    @Column(length = 500)
+    private String reviewerNote;
+
+    private Instant reviewedAt;
 }

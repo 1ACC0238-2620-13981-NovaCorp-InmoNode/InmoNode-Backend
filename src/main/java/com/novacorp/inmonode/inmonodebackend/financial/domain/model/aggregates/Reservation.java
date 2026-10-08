@@ -33,10 +33,12 @@ public class Reservation {
     private final Instant reservedAt;
     private ReservationStatus status;
     private final List<PaymentEvidence> evidences;
+    private @Nullable Instant verifiedAt;
 
     private Reservation(@Nullable Long id, Long lotId, ReservationChannel channel, Long requesterId,
                         @Nullable UUID prospectId, @Nullable UUID sourceEventId, Money initialAmount,
-                        Instant reservedAt, ReservationStatus status, List<PaymentEvidence> evidences) {
+                        Instant reservedAt, ReservationStatus status, List<PaymentEvidence> evidences,
+                        @Nullable Instant verifiedAt) {
         this.id = id;
         this.lotId = lotId;
         this.channel = channel;
@@ -47,6 +49,7 @@ public class Reservation {
         this.reservedAt = reservedAt;
         this.status = status;
         this.evidences = new ArrayList<>(evidences);
+        this.verifiedAt = verifiedAt;
     }
 
     /**
@@ -84,16 +87,16 @@ public class Reservation {
             throw new IllegalArgumentException("a web reservation needs its lot, buyer, id, amount and date");
         }
         return new Reservation(null, lotId, ReservationChannel.WEB, buyerId, null, sourceEventId, initialAmount,
-                requestedAt, ReservationStatus.BLOCKED, List.of());
+                requestedAt, ReservationStatus.BLOCKED, List.of(), null);
     }
 
     /** Rebuilds an already persisted reservation, with the payment evidences it received. */
     public static Reservation restore(Long id, Long lotId, ReservationChannel channel, Long requesterId,
                                       @Nullable UUID prospectId, @Nullable UUID sourceEventId, Money initialAmount,
                                       Instant reservedAt, ReservationStatus status,
-                                      List<PaymentEvidence> evidences) {
+                                      List<PaymentEvidence> evidences, @Nullable Instant verifiedAt) {
         return new Reservation(id, lotId, channel, requesterId, prospectId, sourceEventId, initialAmount,
-                reservedAt, status, evidences);
+                reservedAt, status, evidences, verifiedAt);
     }
 
     private static Reservation field(Long lotId, Long agentId, UUID prospectId, UUID sourceEventId,
@@ -103,7 +106,7 @@ public class Reservation {
             throw new IllegalArgumentException("a field reservation needs its lot, agent, prospect, id, amount and date");
         }
         return new Reservation(null, lotId, ReservationChannel.FIELD, agentId, prospectId, sourceEventId,
-                initialAmount, reservedAt, status, List.of());
+                initialAmount, reservedAt, status, List.of(), null);
     }
 
     /**
@@ -142,8 +145,59 @@ public class Reservation {
         return false;
     }
 
+    /**
+     * The back office approves an evidence received on time: the reservation is verified and its lot can be reserved;
+     * the caller moves the lot along. The rules to approve are checked first by {@code FinancialVerificationService}.
+     *
+     * @throws IllegalStateException when the reservation is not waiting for verification, or the evidence is not one
+     *                               of its pending ones received on time
+     */
+    public void verify(UUID reference, Long reviewerId, @Nullable String note, Instant now) {
+        var evidence = pendingEvidence(reference);
+        if (status != ReservationStatus.PENDING_VERIFICATION || evidence.isLate()) {
+            throw new IllegalStateException("reservation %s cannot be verified with evidence %s"
+                    .formatted(sourceEventId, reference));
+        }
+        replace(evidence, evidence.approved(reviewerId, note, now));
+        status = ReservationStatus.VERIFIED;
+        verifiedAt = now;
+    }
+
+    /**
+     * The back office rejects an evidence (US-25, Scenario 2). When it was the only one under review, the reservation
+     * waits for a substitute again ({@code BLOCKED}); the caller holds the lot for a new window.
+     *
+     * @return whether the reservation went back to waiting for a substitute
+     * @throws IllegalStateException when the evidence is not a pending one of this reservation
+     */
+    public boolean rejectEvidence(UUID reference, Long reviewerId, String reason, Instant now) {
+        var evidence = pendingEvidence(reference);
+        replace(evidence, evidence.rejected(reviewerId, reason, now));
+        var otherOnTime = evidences.stream().anyMatch(other -> other.isPending() && !other.isLate());
+        if (status != ReservationStatus.PENDING_VERIFICATION || otherOnTime) {
+            return false;
+        }
+        status = ReservationStatus.BLOCKED;
+        return true;
+    }
+
+    private PaymentEvidence pendingEvidence(UUID reference) {
+        return findEvidence(reference)
+                .filter(PaymentEvidence::isPending)
+                .orElseThrow(() -> new IllegalStateException("no pending payment evidence %s in reservation %s"
+                        .formatted(reference, sourceEventId)));
+    }
+
+    private void replace(PaymentEvidence previous, PaymentEvidence decided) {
+        evidences.set(evidences.indexOf(previous), decided);
+    }
+
     public Optional<PaymentEvidence> findEvidence(UUID reference) {
         return evidences.stream().filter(evidence -> evidence.getReference().equals(reference)).findFirst();
+    }
+
+    public Optional<PaymentEvidence> findEvidenceById(Long evidenceId) {
+        return evidences.stream().filter(evidence -> evidenceId.equals(evidence.getId())).findFirst();
     }
 
     public boolean isCancelledByConflict() {
@@ -160,4 +214,5 @@ public class Reservation {
     public Instant getReservedAt() { return reservedAt; }
     public ReservationStatus getStatus() { return status; }
     public List<PaymentEvidence> getEvidences() { return List.copyOf(evidences); }
+    public @Nullable Instant getVerifiedAt() { return verifiedAt; }
 }

@@ -4,10 +4,12 @@ import com.novacorp.inmonode.inmonodebackend.shared.application.storage.ObjectSt
 import com.novacorp.inmonode.inmonodebackend.shared.infrastructure.storage.s3.configuration.S3StorageProperties;
 import org.springframework.stereotype.Component;
 import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.HeadObjectRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.model.S3Exception;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
+import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
 import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignRequest;
 
 import java.net.URISyntaxException;
@@ -48,6 +50,19 @@ public class S3ObjectStorage implements ObjectStorage {
         try {
             return new PresignedUpload(presigned.url().toURI(), presigned.expiration(),
                     Map.of("Content-Type", contentType, "Content-Length", String.valueOf(sizeBytes)));
+        } catch (URISyntaxException ex) {
+            throw new IllegalStateException("The storage signed an invalid URL", ex);
+        }
+    }
+
+    @Override
+    public PresignedDownload presignDownload(String key, Duration validity) {
+        var presigned = s3Presigner.presignGetObject(GetObjectPresignRequest.builder()
+                .signatureDuration(validity)
+                .getObjectRequest(GetObjectRequest.builder().bucket(bucket).key(key).build())
+                .build());
+        try {
+            return new PresignedDownload(presigned.url().toURI(), presigned.expiration());
         } catch (URISyntaxException ex) {
             throw new IllegalStateException("The storage signed an invalid URL", ex);
         }

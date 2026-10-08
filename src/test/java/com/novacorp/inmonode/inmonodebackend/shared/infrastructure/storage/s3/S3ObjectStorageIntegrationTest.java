@@ -74,6 +74,26 @@ class S3ObjectStorageIntegrationTest {
     }
 
     @Test
+    void aClientDownloadsTheStoredObjectWithThePresignedUrl() throws Exception {
+        var key = uniqueKey();
+        var image = new byte[2048];
+        image[0] = 42;
+        put(objectStorage.presignUpload(key, JPEG, image.length, Duration.ofMinutes(10)), image, JPEG);
+        var before = Instant.now();
+
+        var download = objectStorage.presignDownload(key, Duration.ofMinutes(10));
+        var response = http.send(HttpRequest.newBuilder(download.url()).GET().build(),
+                HttpResponse.BodyHandlers.ofByteArray());
+
+        assertEquals(200, response.statusCode());
+        assertArrayEquals(image, response.body());
+        assertTrue(download.expiresAt().isAfter(before.plus(Duration.ofMinutes(9))));
+        var missing = objectStorage.presignDownload(uniqueKey(), Duration.ofMinutes(10));
+        assertEquals(404, http.send(HttpRequest.newBuilder(missing.url()).GET().build(),
+                HttpResponse.BodyHandlers.discarding()).statusCode());
+    }
+
+    @Test
     void nothingIsDescribedWhereNothingWasUploaded() {
         assertTrue(objectStorage.describe(uniqueKey()).isEmpty());
     }
