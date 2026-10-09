@@ -16,6 +16,8 @@ public interface ContractRepository {
 
     Optional<Contract> findById(Long id);
 
+    Optional<Contract> findByIdForUpdate(Long id);
+
     /** The contract of the reservation, if one was issued: there is at most one. */
     Optional<Contract> findByReservationId(Long reservationId);
 }

@@ -17,6 +17,7 @@ import com.novacorp.inmonode.inmonodebackend.shared.application.result.Applicati
 import com.novacorp.inmonode.inmonodebackend.shared.application.result.Result;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.HashSet;
 import java.util.Optional;
@@ -24,8 +25,8 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 /**
- * Not transactional on purpose: the prospects are stored in one transaction and every reservation is consolidated in
- * its own, so a conflict never undoes the accepted ones (US-32, Scenario 1).
+ * Validates the entire batch before writing. Availability conflicts are normal per-item outcomes;
+ * a technical failure rolls back prospects, reservations and voucher operations together.
  */
 @Service
 public class FieldSyncCommandServiceImpl implements FieldSyncCommandService {
@@ -49,14 +50,42 @@ public class FieldSyncCommandServiceImpl implements FieldSyncCommandService {
     }
 
     @Override
+    @Transactional
     public Result<FieldSyncResult, ApplicationError> handle(SyncFieldRecordsCommand command) {
         var agentId = externalIamService.currentAgentId().orElse(null);
         if (agentId == null) {
             return Result.failure(new ApplicationError("UNAUTHORIZED", "The agent is not authenticated"));
         }
+        for (int index = 0; index < command.prospects().size(); index++) {
+            var data = command.prospects().get(index);
+            try {
+                Prospect.register(data.prospectId(), agentId, data.document(), data.fullName(), data.phone(),
+                        data.registeredAt() == null ? java.time.Instant.EPOCH : data.registeredAt());
+            } catch (IllegalArgumentException invalid) {
+                var field = "prospects[%d]".formatted(index);
+                return Result.failure(ApplicationError.validationError(field, field + ": " + invalid.getMessage()));
+            }
+        }
+        var incomingIds = command.prospects().stream().map(ProspectData::prospectId).toList();
+        var foreignIds = prospectRepository.findByProspectIds(incomingIds).stream()
+                .filter(prospect -> !prospect.isRegisteredBy(agentId)).map(Prospect::getProspectId).collect(Collectors.toSet());
+        for (int index = 0; index < command.prospects().size(); index++) {
+            if (foreignIds.contains(command.prospects().get(index).prospectId())) {
+                var field = "prospects[%d].id".formatted(index);
+                return Result.failure(ApplicationError.validationError(field, field + ": prospect is not owned by this agent"));
+            }
+        }
         var unknownProspect = firstUnknownProspect(command, agentId);
         if (unknownProspect.isPresent()) {
             return Result.failure(unknownProspect.get());
+        }
+        var referencedLots = command.reservations().stream().map(ReservationData::lotId).collect(Collectors.toSet());
+        var knownLots = externalFinancialService.existingLotIds(referencedLots);
+        for (int index = 0; index < command.reservations().size(); index++) {
+            if (!knownLots.contains(command.reservations().get(index).lotId())) {
+                var field = "reservations[%d].lotId".formatted(index);
+                return Result.failure(ApplicationError.validationError(field, field + ": lot does not exist"));
+            }
         }
         var prospectsSynced = prospectCommandService.handle(new RegisterProspectsCommand(agentId, command.prospects()));
         var outcomes = command.reservations().stream()

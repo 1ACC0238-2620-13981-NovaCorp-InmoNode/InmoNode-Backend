@@ -13,6 +13,7 @@ import org.jspecify.annotations.Nullable;
  */
 public class Project {
 
+    private java.util.List<String> stages = java.util.List.of("Etapa 1");
     private final @Nullable Long id;
     private final String name;
     private final String location;
@@ -79,6 +80,11 @@ public class Project {
         return value == null || value.isBlank() ? null : value.trim();
     }
 
+    public static Project withStages(Project project, java.util.List<String> stages) {
+        project.stages = new com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.ProjectStages(stages).names();
+        return project;
+    }
+    public java.util.List<String> getStages() { return stages; }
     public @Nullable Long getId() { return id; }
     public String getName() { return name; }
     public String getLocation() { return location; }

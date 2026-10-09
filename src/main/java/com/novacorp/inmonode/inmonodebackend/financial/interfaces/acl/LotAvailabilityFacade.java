@@ -32,5 +32,9 @@ public interface LotAvailabilityFacade {
      *                                  or the rate are out of range
      */
     LotBlock blockLot(UUID transactionId, Long lotId, Long buyerId, BigDecimal initialAmount, String currency,
+                      int termMonths, BigDecimal annualInterestRate, Instant requestedAt,
+                      BigDecimal agreedPrice, Long quotationId);
+
+    LotBlock blockLot(UUID transactionId, Long lotId, Long buyerId, BigDecimal initialAmount, String currency,
                       int termMonths, BigDecimal annualInterestRate, Instant requestedAt);
 }

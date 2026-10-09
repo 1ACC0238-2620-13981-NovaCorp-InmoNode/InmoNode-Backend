@@ -22,6 +22,13 @@ import java.util.UUID;
 @Entity
 @Table(name = "contracts", schema = "financial_document_control")
 public class ContractEntity extends AuditableAbstractPersistenceEntity {
+    @Column(name = "co_owner_full_name", length = 200)
+    private String coOwnerFullName;
+    @Column(name = "co_owner_document_type", length = 20)
+    private String coOwnerDocumentType;
+    @Column(name = "co_owner_document_number", length = 20)
+    private String coOwnerDocumentNumber;
+
 
     @Column(nullable = false, unique = true)
     private Long reservationId;

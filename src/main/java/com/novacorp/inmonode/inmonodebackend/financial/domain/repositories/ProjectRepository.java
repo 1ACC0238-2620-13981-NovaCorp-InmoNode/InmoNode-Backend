@@ -17,6 +17,8 @@ public interface ProjectRepository {
 
     Optional<Project> findById(Long id);
 
+    Optional<Project> findByIdForUpdate(Long id);
+
     boolean existsById(Long id);
 
     /** Published projects ordered by name. */

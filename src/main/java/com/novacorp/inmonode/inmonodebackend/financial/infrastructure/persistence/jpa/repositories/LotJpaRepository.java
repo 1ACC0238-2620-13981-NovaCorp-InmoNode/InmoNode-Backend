@@ -4,6 +4,7 @@ import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects
 import com.novacorp.inmonode.inmonodebackend.financial.infrastructure.persistence.jpa.entities.LotEntity;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -15,7 +16,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
-public interface LotJpaRepository extends JpaRepository<LotEntity, Long> {
+public interface LotJpaRepository extends JpaRepository<LotEntity, Long>, JpaSpecificationExecutor<LotEntity> {
 
     @Query("select l.code from LotEntity l where l.projectId = :projectId")
     Set<String> findCodesByProjectId(@Param("projectId") Long projectId);
@@ -31,8 +32,8 @@ public interface LotJpaRepository extends JpaRepository<LotEntity, Long> {
     @Query("select l from LotEntity l where l.id = :id")
     Optional<LotEntity> findByIdForUpdate(@Param("id") Long id);
 
-    @Query("select l.id from LotEntity l where l.status = :blocked and l.blockedUntil <= :now order by l.id")
-    List<Long> findIdsWithExpiredBlock(@Param("blocked") LotStatus blocked, @Param("now") Instant now);
+    @Query("select l.id from LotEntity l where (l.status = :blocked or l.status = :pending) and l.blockedUntil <= :now order by l.id")
+    List<Long> findIdsWithExpiredBlock(@Param("blocked") LotStatus blocked, @Param("pending") LotStatus pending, @Param("now") Instant now);
 
     @Query("""
             select l.projectId as projectId,
@@ -42,11 +43,11 @@ public interface LotJpaRepository extends JpaRepository<LotEntity, Long> {
                    min(l.priceAmount) as minPrice,
                    max(l.priceAmount) as maxPrice
               from LotEntity l
-             where l.projectId in :projectIds
+             where l.projectId in :projectIds and l.status <> :draft
              group by l.projectId""")
     List<LotStatisticsView> summarizeByProjectIds(@Param("projectIds") Collection<Long> projectIds,
                                                   @Param("available") LotStatus available,
-                                                  @Param("sold") LotStatus sold);
+                                                  @Param("sold") LotStatus sold, @Param("draft") LotStatus draft);
 
     /** Row of {@link #summarizeByProjectIds}: lot figures of one project. */
     interface LotStatisticsView {

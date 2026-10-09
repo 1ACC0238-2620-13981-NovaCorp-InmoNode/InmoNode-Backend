@@ -13,7 +13,7 @@ class FinancingRulesTest {
         var rules = new FinancingRules(new BigDecimal("10"), new BigDecimal("12.5"), 120, new BigDecimal("2.0004"));
 
         assertEquals(new BigDecimal("10.00"), rules.minDownPaymentPercentage());
-        assertEquals(new BigDecimal("12.500"), rules.annualInterestRate());
+        assertEquals(new BigDecimal("12.5000"), rules.annualInterestRate());
         assertEquals(new BigDecimal("2.000"), rules.lateFeeRate());
         assertEquals(120, rules.maxTermMonths());
     }

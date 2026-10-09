@@ -16,9 +16,11 @@ import java.util.UUID;
 public class ReservationRepositoryImpl implements ReservationRepository {
 
     private final ReservationJpaRepository jpaRepository;
+    private final jakarta.persistence.EntityManager entityManager;
 
-    public ReservationRepositoryImpl(ReservationJpaRepository jpaRepository) {
+    public ReservationRepositoryImpl(ReservationJpaRepository jpaRepository, jakarta.persistence.EntityManager entityManager) {
         this.jpaRepository = jpaRepository;
+        this.entityManager = entityManager;
     }
 
     /** Flushed, so the evidences added to the reservation come back with their generated ids too. */
@@ -34,6 +36,18 @@ public class ReservationRepositoryImpl implements ReservationRepository {
     @Override
     public Optional<Reservation> findById(Long id) {
         return jpaRepository.findById(id).map(ReservationEntityAssembler::toDomain);
+    }
+
+    @Override
+    public Optional<Reservation> findByIdForUpdate(Long id) {
+        return jpaRepository.findById(id).map(entity -> {
+            // A previous lookup in this transaction may have preceded a wait for the lot lock.
+            // Reload eager children too. Flush preserves other writes before detaching this aggregate.
+            entityManager.flush();
+            entityManager.detach(entity);
+            var fresh = entityManager.find(ReservationEntity.class, id, jakarta.persistence.LockModeType.PESSIMISTIC_WRITE);
+            return ReservationEntityAssembler.toDomain(fresh);
+        });
     }
 
     @Override

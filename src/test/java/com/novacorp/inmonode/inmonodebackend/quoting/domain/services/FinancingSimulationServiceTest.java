@@ -23,16 +23,16 @@ class FinancingSimulationServiceTest {
 
         assertEquals(12, schedule.size());
         var first = schedule.getFirst();
-        assertEquals(pen("3198.56"), first.amount());
-        assertEquals(pen("360.00"), first.interest());
-        assertEquals(pen("2838.56"), first.principal());
-        assertEquals(pen("33161.44"), first.balance());
-        schedule.subList(0, 11).forEach(installment -> assertEquals(pen("3198.56"), installment.amount()));
+        assertEquals(pen("3188.23"), first.amount());
+        assertEquals(pen("341.60"), first.interest());
+        assertEquals(pen("2846.63"), first.principal());
+        assertEquals(pen("33153.37"), first.balance());
+        schedule.subList(0, 11).forEach(installment -> assertEquals(pen("3188.23"), installment.amount()));
         var last = schedule.getLast();
-        assertEquals(pen("3198.50"), last.amount(), "the last installment absorbs the rounding");
+        assertEquals(pen("3188.28"), last.amount(), "the last installment absorbs the rounding");
         assertEquals(pen("0.00"), last.balance());
         assertEquals(pen("36000.00"), sum(schedule, ScheduledInstallment::principal));
-        assertEquals(pen("2382.66"), sum(schedule, ScheduledInstallment::interest));
+        assertEquals(pen("2258.81"), sum(schedule, ScheduledInstallment::interest));
     }
 
     @Test
@@ -63,7 +63,7 @@ class FinancingSimulationServiceTest {
         var schedule = FinancingSimulationService.frenchSchedule(pen("36000"), new BigDecimal("12"), 1, START);
 
         assertEquals(1, schedule.size());
-        assertEquals(pen("36360.00"), schedule.getFirst().amount());
+        assertEquals(pen("36341.60"), schedule.getFirst().amount());
         assertEquals(pen("36000.00"), schedule.getFirst().principal());
     }
 

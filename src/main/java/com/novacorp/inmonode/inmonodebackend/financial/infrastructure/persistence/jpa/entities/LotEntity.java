@@ -28,6 +28,9 @@ public class LotEntity extends AuditableAbstractPersistenceEntity {
     @Column(nullable = false, length = 30)
     private String code;
 
+    @Column(nullable = false, length = 80)
+    private String stageName;
+
     @Column(nullable = false, precision = 12, scale = 2)
     private BigDecimal area;
 

@@ -128,7 +128,7 @@ class InstallmentReviewIntegrationTest {
                 && notice.installmentNumber() == 1
                 && notice.termMonths() == 12
                 && notice.dueDate().equals(LocalDate.parse("2019-02-15"))
-                && notice.amountDue().equals(new BigDecimal("3198.56"))
+                && notice.amountDue().equals(new BigDecimal("3188.23"))
                 && notice.penalty().equals(new BigDecimal("0.00"))
                 && notice.currency().equals("PEN")
                 && notice.lotCode().equals("R-01")
@@ -154,27 +154,27 @@ class InstallmentReviewIntegrationTest {
         assertTrue(summary.overdueInstallments() >= 1);
         var first = installment(statement, 1);
         assertEquals(InstallmentStatus.OVERDUE, first.getStatus());
-        assertEquals(new BigDecimal("47.98"), first.getPenalty());
+        assertEquals(new BigDecimal("47.82"), first.getPenalty());
         assertNotNull(first.getOverdueNotifiedAt());
         assertNull(first.getReminderSentAt(), "the job was off: it went straight to overdue");
         verify(paymentNotificationSender).notifyOverdue(argThat(notice -> notice.transactionId().equals(transactionId)
                 && notice.installmentNumber() == 1
-                && notice.amount().equals(new BigDecimal("3198.56"))
-                && notice.penalty().equals(new BigDecimal("47.98"))
-                && notice.amountDue().equals(new BigDecimal("3246.54"))));
+                && notice.amount().equals(new BigDecimal("3188.23"))
+                && notice.penalty().equals(new BigDecimal("47.82"))
+                && notice.amountDue().equals(new BigDecimal("3236.05"))));
 
         review("2018-02-17");
         verify(paymentNotificationSender, times(1)).notifyOverdue(argThat(about(transactionId, 1)));
-        assertEquals(new BigDecimal("47.98"), installment(statement, 1).getPenalty(), "the fee is charged once");
+        assertEquals(new BigDecimal("47.82"), installment(statement, 1).getPenalty(), "the fee is charged once");
 
-        pay(statement, 1, "3198.56")
+        pay(statement, 1, "3188.23")
                 .andExpect(status().isUnprocessableEntity())
-                .andExpect(jsonPath("$.details").value(containsString("3246.54 PEN")));
-        pay(statement, 1, "3246.54")
+                .andExpect(jsonPath("$.details").value(containsString("3236.05 PEN")));
+        pay(statement, 1, "3236.05")
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.installments[0].status").value("PAID"))
-                .andExpect(jsonPath("$.installments[0].penalty").value(47.98))
-                .andExpect(jsonPath("$.installments[0].paidAmount").value(3246.54))
+                .andExpect(jsonPath("$.installments[0].penalty").value(47.82))
+                .andExpect(jsonPath("$.installments[0].paidAmount").value(3236.05))
                 .andExpect(jsonPath("$.paidAmount").value(12246.54));
     }
 
@@ -192,7 +192,7 @@ class InstallmentReviewIntegrationTest {
         review("2017-02-17");
         assertNotNull(installment(statement, 1).getOverdueNotifiedAt());
         verify(paymentNotificationSender, times(2)).notifyOverdue(argThat(about(transactionId, 1)));
-        assertEquals(new BigDecimal("47.98"), installment(statement, 1).getPenalty());
+        assertEquals(new BigDecimal("47.82"), installment(statement, 1).getPenalty());
     }
 
     @Test

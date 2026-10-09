@@ -81,7 +81,7 @@ public class SeparationRequestCommandServiceImpl implements SeparationRequestCom
         var transactionId = UUID.randomUUID();
         var outcome = externalLotAvailabilityService.blockLot(transactionId, quotation.getLotId(),
                 quotation.getBuyerId(), quotation.getInitialPayment(), quotation.getTermMonths(),
-                quotation.getAnnualInterestRate(), now);
+                quotation.getAnnualInterestRate(), now, quotation.getLotPrice(), quotation.getId());
         return switch (outcome.result()) {
             case NOT_FOUND -> Result.failure(ApplicationError.notFound("lot", String.valueOf(quotation.getLotId())));
             case UNAVAILABLE -> {

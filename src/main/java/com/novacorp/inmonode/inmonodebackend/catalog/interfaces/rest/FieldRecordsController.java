@@ -7,6 +7,7 @@ import com.novacorp.inmonode.inmonodebackend.catalog.interfaces.rest.transform.S
 import com.novacorp.inmonode.inmonodebackend.shared.interfaces.rest.transform.ResponseEntityAssembler;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -31,9 +32,10 @@ public class FieldRecordsController {
     }
 
     @PostMapping
+    @ApiResponse(responseCode = "201", description = "Batch processed with one outcome per reservation")
     @PreAuthorize("hasRole('FIELD_AGENT')")
     @Operation(summary = "Synchronize the prospects and reservations registered offline (US-11, US-12, US-32)",
-            description = "Field agents only (FIELD_AGENT). Answers 200 with one result per reservation: SYNCED (the "
+            description = "Field agents only (FIELD_AGENT). Answers 201 with one result per reservation: SYNCED (the "
                     + "lot is held for 24 hours), CONFLICT (another operation reached the server first; revert the lot "
                     + "and alert the agent) or DUPLICATE (already processed; idempotent by the device id). Accepted "
                     + "reservations are kept even when others conflict. A structurally invalid payload is rejected "
@@ -42,6 +44,6 @@ public class FieldRecordsController {
         var result = fieldSyncCommandService.handle(
                 SyncFieldRecordsCommandFromResourceAssembler.toCommandFromResource(resource));
         return ResponseEntityAssembler.toResponseEntityFromResult(
-                result, FieldSyncResultResourceAssembler::toResourceFromResult, HttpStatus.OK);
+                result, FieldSyncResultResourceAssembler::toResourceFromResult, HttpStatus.CREATED);
     }
 }

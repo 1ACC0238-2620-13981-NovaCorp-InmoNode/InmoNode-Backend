@@ -299,7 +299,7 @@ class VoucherRegistrationIntegrationTest {
                                  "reservations": [{"id": "%s", "lotId": %d, "prospectId": "%1$s",
                                                    "initialAmount": 1500, "reservedAt": "%s"}]}"""
                                 .formatted(prospect, reservation, availableLot(), Instant.now().minusSeconds(3600))))
-                .andExpect(status().isOk())
+                .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.reservations[0].result").value("SYNCED"));
         return reservation;
     }

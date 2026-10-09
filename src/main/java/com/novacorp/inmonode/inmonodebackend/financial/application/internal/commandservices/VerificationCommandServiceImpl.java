@@ -14,6 +14,8 @@ import com.novacorp.inmonode.inmonodebackend.financial.domain.services.Verificat
 import com.novacorp.inmonode.inmonodebackend.shared.application.result.ApplicationError;
 import com.novacorp.inmonode.inmonodebackend.shared.application.result.Result;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Value;
+import java.time.Duration;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
@@ -34,13 +36,22 @@ public class VerificationCommandServiceImpl implements VerificationCommandServic
     private final LotRepository lotRepository;
     private final ExternalIamService externalIamService;
     private final Clock clock;
+    private final Duration replacementWindow;
+    private final Duration deliveryGrace;
 
     public VerificationCommandServiceImpl(ReservationRepository reservationRepository, LotRepository lotRepository,
-                                          ExternalIamService externalIamService, Clock clock) {
+                                          ExternalIamService externalIamService, Clock clock,
+            @Value("${financial.evidence.resubmission-window:PT24H}") Duration replacementWindow,
+            @Value("${financial.evidence.delivery-grace:PT15M}") Duration deliveryGrace) {
         this.reservationRepository = reservationRepository;
         this.lotRepository = lotRepository;
         this.externalIamService = externalIamService;
         this.clock = clock;
+        if (replacementWindow.isNegative() || replacementWindow.isZero() || deliveryGrace.isNegative()) {
+            throw new IllegalArgumentException("invalid evidence replacement window");
+        }
+        this.replacementWindow = replacementWindow;
+        this.deliveryGrace = deliveryGrace;
     }
 
     @Override
@@ -65,9 +76,9 @@ public class VerificationCommandServiceImpl implements VerificationCommandServic
         return decide(command.evidenceId(), (reservation, evidence) -> Optional.empty(),
                 (reservation, lot, reviewerId, now, evidence) -> {
                     var reopened = reservation.rejectEvidence(evidence.getReference(), reviewerId, command.reason(),
-                            now);
-                    if (reopened && !lot.reopenBlock(Objects.requireNonNull(reservation.getId()), now,
-                            reservation.getChannel().blockValidity())) {
+                            now, replacementWindow);
+                    if (reopened && !lot.awaitReplacement(Objects.requireNonNull(reservation.getId()),
+                            Objects.requireNonNull(reservation.getResubmissionDeadline()).plus(deliveryGrace))) {
                         throw new IllegalStateException("lot %d is not waiting for the verification of reservation %s"
                                 .formatted(lot.getId(), reservation.getSourceEventId()));
                     }
@@ -85,13 +96,14 @@ public class VerificationCommandServiceImpl implements VerificationCommandServic
         if (reviewerId == null) {
             return Result.failure(new ApplicationError("UNAUTHORIZED", "The reviewer is not authenticated"));
         }
-        var lotId = reservationRepository.findByEvidenceId(evidenceId).map(Reservation::getLotId).orElse(null);
-        if (lotId == null) {
+        var found = reservationRepository.findByEvidenceId(evidenceId).orElse(null);
+        if (found == null) {
             return Result.failure(ApplicationError.notFound("payment_evidence", String.valueOf(evidenceId)));
         }
+        var lotId = found.getLotId();
         var lot = lotRepository.findByIdForUpdate(lotId).orElseThrow();
         // Read under the lock: a substitute voucher or another decision may have changed it.
-        var reservation = reservationRepository.findByEvidenceId(evidenceId).orElseThrow();
+        var reservation = reservationRepository.findByIdForUpdate(found.getId()).orElseThrow();
         var evidence = reservation.findEvidenceById(evidenceId).orElseThrow();
         if (!evidence.isPending()) {
             return Result.failure(ApplicationError.conflict("payment_evidence",

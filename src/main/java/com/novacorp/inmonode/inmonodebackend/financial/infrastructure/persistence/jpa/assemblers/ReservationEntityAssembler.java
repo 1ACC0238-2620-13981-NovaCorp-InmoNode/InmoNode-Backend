@@ -1,6 +1,7 @@
 package com.novacorp.inmonode.inmonodebackend.financial.infrastructure.persistence.jpa.assemblers;
 
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.aggregates.Reservation;
+import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.CoOwner;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.entities.PaymentEvidence;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.FinancingPlan;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.Money;
@@ -21,12 +22,13 @@ public final class ReservationEntityAssembler {
     private ReservationEntityAssembler() {}
 
     public static Reservation toDomain(ReservationEntity entity) {
-        return Reservation.restore(entity.getId(), entity.getLotId(), entity.getChannel(), entity.getRequesterId(),
+        return Reservation.withResubmissionDeadline(Reservation.withCoOwner(Reservation.restore(entity.getId(), entity.getLotId(), entity.getChannel(), entity.getRequesterId(),
                 entity.getProspectId(), entity.getSourceEventId(),
                 new Money(entity.getInitialAmount(), entity.getInitialAmountCurrency()),
                 entity.getReservedAt(), entity.getStatus(),
                 entity.getEvidences().stream().map(ReservationEntityAssembler::toDomain).toList(),
-                entity.getVerifiedAt(), toFinancingPlan(entity));
+                entity.getVerifiedAt(), toFinancingPlan(entity)), entity.getCoOwnerFullName() == null ? null :
+                        new CoOwner(entity.getCoOwnerFullName(), entity.getCoOwnerDocumentType(), entity.getCoOwnerDocumentNumber())), entity.getResubmissionDeadline());
     }
 
     private static @Nullable FinancingPlan toFinancingPlan(ReservationEntity entity) {
@@ -34,7 +36,7 @@ public final class ReservationEntityAssembler {
             return null;
         }
         return new FinancingPlan(new Money(entity.getLotPrice(), entity.getInitialAmountCurrency()),
-                entity.getTermMonths(), entity.getAnnualInterestRate());
+                entity.getTermMonths(), entity.getAnnualInterestRate(), entity.getQuotationId());
     }
 
     /**
@@ -52,11 +54,17 @@ public final class ReservationEntityAssembler {
         entity.setStatus(reservation.getStatus());
         entity.setReservedAt(reservation.getReservedAt());
         entity.setVerifiedAt(reservation.getVerifiedAt());
+        entity.setResubmissionDeadline(reservation.getResubmissionDeadline());
         var plan = reservation.getFinancingPlan();
         entity.setLotPrice(plan == null ? null : plan.lotPrice().amount());
         entity.setTermMonths(plan == null ? null : plan.termMonths());
         entity.setAnnualInterestRate(plan == null ? null : plan.annualInterestRate());
+        entity.setQuotationId(plan == null ? null : plan.quotationId());
         copyEvidencesToEntity(reservation, entity);
+        var coOwner = reservation.getCoOwner();
+        entity.setCoOwnerFullName(coOwner == null ? null : coOwner.fullName());
+        entity.setCoOwnerDocumentType(coOwner == null ? null : coOwner.documentType());
+        entity.setCoOwnerDocumentNumber(coOwner == null ? null : coOwner.documentNumber());
         return entity;
     }
 

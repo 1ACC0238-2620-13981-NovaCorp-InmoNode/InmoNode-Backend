@@ -36,9 +36,9 @@ class QuotationTest {
         assertEquals(new BigDecimal("12"), quotation.getAnnualInterestRate());
         assertEquals(12, quotation.getTermMonths());
         assertEquals(12, quotation.getInstallments().size());
-        assertEquals(pen("3198.56"), quotation.monthlyInstallment());
-        assertEquals(pen("2382.66"), quotation.totalInterest());
-        assertEquals(pen("47382.66"), quotation.totalToPay());
+        assertEquals(pen("3188.23"), quotation.monthlyInstallment());
+        assertEquals(pen("2258.81"), quotation.totalInterest());
+        assertEquals(pen("47258.81"), quotation.totalToPay());
         assertEquals(LocalDate.parse("2026-11-08"), quotation.getInstallments().getFirst().dueDate(),
                 "the first installment falls a month after the day of the simulation in Lima");
         assertEquals(NOW, quotation.getGeneratedAt());

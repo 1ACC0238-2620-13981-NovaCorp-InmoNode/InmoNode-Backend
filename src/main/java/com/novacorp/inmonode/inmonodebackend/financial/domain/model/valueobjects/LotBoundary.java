@@ -1,6 +1,7 @@
 package com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects;
 
 import org.locationtech.jts.geom.Coordinate;
+import org.locationtech.jts.geom.Envelope;
 import org.locationtech.jts.geom.GeometryFactory;
 import org.locationtech.jts.geom.Polygon;
 import org.locationtech.jts.io.ParseException;
@@ -65,6 +66,12 @@ public final class LotBoundary {
 
     public String toWkt() {
         return new WKTWriter().write(polygon);
+    }
+
+    /** Includes lots whose polygons touch or intersect the requested viewport. */
+    public boolean intersects(MapBounds bounds) {
+        return polygon.intersects(GEOMETRY_FACTORY.toGeometry(
+                new Envelope(bounds.west(), bounds.east(), bounds.south(), bounds.north())));
     }
 
     /** The closed outer ring as {@code [longitude, latitude]} positions, ready for a GeoJSON Polygon. */

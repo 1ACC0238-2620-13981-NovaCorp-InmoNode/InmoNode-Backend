@@ -30,9 +30,18 @@ import java.util.UUID;
 @Entity
 @Table(name = "reservations", schema = "financial_document_control")
 public class ReservationEntity extends AuditableAbstractPersistenceEntity {
+    @Column(name = "co_owner_full_name", length = 200)
+    private String coOwnerFullName;
+    @Column(name = "co_owner_document_type", length = 20)
+    private String coOwnerDocumentType;
+    @Column(name = "co_owner_document_number", length = 20)
+    private String coOwnerDocumentNumber;
+
 
     @Column(nullable = false)
     private Long lotId;
+
+    private Long quotationId;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 10)
@@ -59,6 +68,8 @@ public class ReservationEntity extends AuditableAbstractPersistenceEntity {
     @Column(nullable = false)
     private Instant reservedAt;
 
+    private Instant resubmissionDeadline;
+
     private Instant verifiedAt;
 
     /** Price of the lot when a web reservation blocked it; with the term and the rate, its financing plan. */
@@ -67,7 +78,7 @@ public class ReservationEntity extends AuditableAbstractPersistenceEntity {
 
     private Integer termMonths;
 
-    @Column(precision = 6, scale = 3)
+    @Column(precision = 7, scale = 4)
     private BigDecimal annualInterestRate;
 
     /** A reservation receives few evidences and needs them all to be rebuilt, so they are loaded with it. */

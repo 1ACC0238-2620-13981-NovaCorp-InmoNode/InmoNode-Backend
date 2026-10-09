@@ -57,7 +57,8 @@ public class AccountStatementsController {
                     + "pending or overdue: the amount must be exactly its amountDue (the installment plus its late "
                     + "fee), otherwise 422 BUSINESS_RULE_VIOLATION names the exact amount. paidAt defaults to now "
                     + "and cannot be in the future. Answers the updated statement; with the last installment the "
-                    + "balance is 0.00, the progress 100 % and the lot SOLD. 409 INSTALLMENT_CONFLICT when it was "
+                    + "balance is 0.00 and the progress 100 %. SOLD requires a verified contractual signature (US-56). "
+                    + "409 INSTALLMENT_CONFLICT when it was "
                     + "already paid; 404 ACCOUNT_STATEMENT_NOT_FOUND or INSTALLMENT_NOT_FOUND.")
     public ResponseEntity<?> registerPayment(@PathVariable Long accountStatementId, @PathVariable int number,
                                              @Valid @RequestBody RegisterInstallmentPaymentResource resource) {

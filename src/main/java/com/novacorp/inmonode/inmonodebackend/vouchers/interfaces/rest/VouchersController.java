@@ -1,6 +1,14 @@
 package com.novacorp.inmonode.inmonodebackend.vouchers.interfaces.rest;
 
 import com.novacorp.inmonode.inmonodebackend.shared.interfaces.rest.transform.ResponseEntityAssembler;
+import com.novacorp.inmonode.inmonodebackend.shared.domain.model.valueobjects.PageRequest;
+import com.novacorp.inmonode.inmonodebackend.shared.domain.model.valueobjects.PageResult;
+import com.novacorp.inmonode.inmonodebackend.shared.application.result.Result;
+import com.novacorp.inmonode.inmonodebackend.shared.application.result.ApplicationError;
+import com.novacorp.inmonode.inmonodebackend.vouchers.domain.model.aggregates.Voucher;
+import com.novacorp.inmonode.inmonodebackend.vouchers.domain.model.queries.GetMyVouchersQuery;
+import com.novacorp.inmonode.inmonodebackend.vouchers.domain.services.VoucherQueryService;
+import com.novacorp.inmonode.inmonodebackend.vouchers.interfaces.rest.transform.VoucherPageResourceAssembler;
 import com.novacorp.inmonode.inmonodebackend.vouchers.domain.services.VoucherCommandService;
 import com.novacorp.inmonode.inmonodebackend.vouchers.interfaces.rest.resources.RegisterVoucherResource;
 import com.novacorp.inmonode.inmonodebackend.vouchers.interfaces.rest.resources.VoucherUploadRequestResource;
@@ -18,6 +26,8 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 
 @RestController
 @RequestMapping("/api/v1/vouchers")
@@ -25,9 +35,33 @@ import org.springframework.web.bind.annotation.RestController;
 public class VouchersController {
 
     private final VoucherCommandService voucherCommandService;
+    private final VoucherQueryService voucherQueryService;
 
-    public VouchersController(VoucherCommandService voucherCommandService) {
+    public VouchersController(VoucherCommandService voucherCommandService, VoucherQueryService voucherQueryService) {
         this.voucherCommandService = voucherCommandService;
+        this.voucherQueryService = voucherQueryService;
+    }
+
+    @GetMapping
+    @PreAuthorize("hasAnyRole('FIELD_AGENT', 'BUYER')")
+    @Operation(summary = "List my vouchers with database pagination (US-46)",
+            description = "Only the caller's vouchers, newest receivedAt first with an id tie-breaker. "
+                    + "page starts at 1; limit defaults to 20 and is capped at 100. Non-positive values return 400. "
+                    + "Total-Count contains the count of all the caller's vouchers. An empty page returns 200. "
+                    + "status is the receipt synchronization status; review decisions and approved download links "
+                    + "are available at /api/v1/reservations/{transactionId}/payment-evidences.")
+    public ResponseEntity<?> getMyVouchers(@RequestParam(defaultValue = "1") int page,
+                                           @RequestParam(defaultValue = "20") int limit) {
+        var result = voucherQueryService.handle(new GetMyVouchersQuery(new PageRequest(page, limit)));
+        var response = ResponseEntityAssembler.toResponseEntityFromResult(
+                result, VoucherPageResourceAssembler::toResourceFromPage, HttpStatus.OK);
+        if (result instanceof Result.Success<PageResult<Voucher>, ApplicationError> success) {
+            return ResponseEntity.status(response.getStatusCode())
+                    .header("Total-Count", Long.toString(success.value().totalCount()))
+                    .header("Cache-Control", "no-store")
+                    .body(response.getBody());
+        }
+        return response;
     }
 
     @PostMapping("/upload-url")

@@ -33,7 +33,7 @@ class SmtpPaymentNotificationSenderTest {
         assertEquals("Tu cuota 3 de 12 vence el 08/01/2027", message.getSubject());
         assertTrue(message.getText().contains("lote A-01 en Los Olivos de Chilca vence el 08/01/2027"),
                 message.getText());
-        assertTrue(message.getText().contains("Monto a pagar: S/ 3198.56"), message.getText());
+        assertTrue(message.getText().contains("Monto a pagar: S/ 3188.23"), message.getText());
     }
 
     @Test
@@ -43,9 +43,9 @@ class SmtpPaymentNotificationSenderTest {
         var message = sent();
         assertEquals("Tu cuota 3 de 12 está vencida", message.getSubject());
         assertTrue(message.getText().contains("venció el 08/01/2027"), message.getText());
-        assertTrue(message.getText().contains("Cuota: S/ 3198.56"), message.getText());
+        assertTrue(message.getText().contains("Cuota: S/ 3188.23"), message.getText());
         assertTrue(message.getText().contains("Mora: S/ 47.98"), message.getText());
-        assertTrue(message.getText().contains("Total a pagar: S/ 3246.54"), message.getText());
+        assertTrue(message.getText().contains("Total a pagar: S/ 3236.21"), message.getText());
     }
 
     @Test
@@ -68,7 +68,7 @@ class SmtpPaymentNotificationSenderTest {
     }
 
     private static PaymentNotice notice(BigDecimal penalty) {
-        var amount = new BigDecimal("3198.56");
+        var amount = new BigDecimal("3188.23");
         return new PaymentNotice("ana@mail.com", UUID.randomUUID(), "Los Olivos de Chilca", "A-01", 3, 12,
                 LocalDate.parse("2027-01-08"), amount, penalty, amount.add(penalty), "PEN");
     }

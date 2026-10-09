@@ -7,6 +7,8 @@ import com.novacorp.inmonode.inmonodebackend.financial.infrastructure.persistenc
 import com.novacorp.inmonode.inmonodebackend.financial.infrastructure.persistence.jpa.entities.AccountStatementEntity;
 import com.novacorp.inmonode.inmonodebackend.financial.infrastructure.persistence.jpa.repositories.AccountStatementJpaRepository;
 import org.springframework.stereotype.Repository;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -16,9 +18,11 @@ import java.util.Optional;
 public class AccountStatementRepositoryImpl implements AccountStatementRepository {
 
     private final AccountStatementJpaRepository jpaRepository;
+    private final EntityManager entityManager;
 
-    public AccountStatementRepositoryImpl(AccountStatementJpaRepository jpaRepository) {
+    public AccountStatementRepositoryImpl(AccountStatementJpaRepository jpaRepository, EntityManager entityManager) {
         this.jpaRepository = jpaRepository;
+        this.entityManager = entityManager;
     }
 
     /** Flushed, so new installments come back with their generated ids too. */
@@ -34,6 +38,16 @@ public class AccountStatementRepositoryImpl implements AccountStatementRepositor
     @Override
     public Optional<AccountStatement> findById(Long id) {
         return jpaRepository.findById(id).map(AccountStatementEntityAssembler::toDomain);
+    }
+
+    @Override
+    public Optional<AccountStatement> findByIdForUpdate(Long id) {
+        return jpaRepository.findById(id).map(entity -> {
+            entityManager.flush();
+            entityManager.detach(entity);
+            var fresh = entityManager.find(AccountStatementEntity.class, id, LockModeType.PESSIMISTIC_WRITE);
+            return AccountStatementEntityAssembler.toDomain(fresh);
+        });
     }
 
     @Override

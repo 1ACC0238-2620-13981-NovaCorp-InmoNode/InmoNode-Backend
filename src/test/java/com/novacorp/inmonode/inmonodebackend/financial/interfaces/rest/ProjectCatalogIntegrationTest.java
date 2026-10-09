@@ -140,6 +140,34 @@ class ProjectCatalogIntegrationTest {
         mockMvc.perform(get("/api/v1/projects/{id}/lots", 999_999L)).andExpect(status().isNotFound());
     }
 
+    @Test
+    void inclusiveAreaPriceAndStatusFiltersAreAppliedToTheProjectLots() throws Exception {
+        var projectId = publishedProjectWithPlanLots();
+        mockMvc.perform(get("/api/v1/projects/{id}/lots", projectId)
+                        .param("minArea", "120.5").param("maxArea", "125")
+                        .param("minPrice", "45000").param("maxPrice", "47500").param("status", "AVAILABLE"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.features.length()").value(2))
+                .andExpect(jsonPath("$.features[0].properties.code").value("A-01"))
+                .andExpect(jsonPath("$.features[1].properties.code").value("A-03"));
+        markSold(projectId, Set.of("A-01"));
+        mockMvc.perform(get("/api/v1/projects/{id}/lots", projectId)
+                        .param("minArea", "120.5").param("status", "AVAILABLE"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.features.length()").value(1))
+                .andExpect(jsonPath("$.features[0].properties.code").value("A-03"));
+    }
+
+    @Test
+    void locationFiltersIntersectTheActualPolygonAndNoMatchesReturnAnEmptyCollection() throws Exception {
+        var projectId = publishedProjectWithPlanLots();
+        mockMvc.perform(get("/api/v1/projects/{id}/lots", projectId)
+                        .param("west", "-76.73699").param("east", "-76.73691")
+                        .param("south", "-12.52099").param("north", "-12.52091"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.features.length()").value(1))
+                .andExpect(jsonPath("$.features[0].properties.code").value("A-01"));
+        mockMvc.perform(get("/api/v1/projects/{id}/lots", projectId).param("minArea", "1000"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.features").isEmpty());
+    }
+
     private Long publishedProjectWithPlanLots() throws Exception {
         var projectId = createProject();
         importPlanLots(projectId);
@@ -173,12 +201,20 @@ class ProjectCatalogIntegrationTest {
                 .andExpect(jsonPath("$.imported").value(3));
     }
 
+    @Autowired
+    private com.novacorp.inmonode.inmonodebackend.financial.domain.repositories.LotRepository domainLots;
+
     private void markSold(Long projectId, Set<String> codes) {
         var lots = lotJpaRepository.findByProjectIdOrderByCodeAsc(projectId).stream()
                 .filter(lot -> codes.contains(lot.getCode()))
                 .toList();
-        lots.forEach(lot -> lot.setStatus(LotStatus.SOLD));
-        lotJpaRepository.saveAll(lots);
+        var snapshots = lots.stream().map(entity -> {
+            var lot = com.novacorp.inmonode.inmonodebackend.financial.infrastructure.persistence.jpa.assemblers.LotEntityAssembler.toDomain(entity);
+            return com.novacorp.inmonode.inmonodebackend.financial.domain.model.aggregates.Lot.withStage(
+                    com.novacorp.inmonode.inmonodebackend.financial.domain.model.aggregates.Lot.restore(lot.getId(), lot.getProjectId(),
+                            lot.getCode(), lot.getDimensions(), lot.getPrice(), lot.getBoundary(), LotStatus.SOLD, null, null), lot.getStageName());
+        }).toList();
+        domainLots.saveAll(snapshots);
     }
 
     private Map<String, Object> catalogEntry(Long projectId) throws Exception {

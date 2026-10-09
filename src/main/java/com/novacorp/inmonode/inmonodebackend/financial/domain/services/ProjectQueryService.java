@@ -19,6 +19,7 @@ import java.util.Optional;
  * they do not exist.
  */
 public interface ProjectQueryService {
+    Result<List<Lot>, ApplicationError> handle(com.novacorp.inmonode.inmonodebackend.financial.domain.model.queries.GetAdminProjectLotsQuery query);
 
     /** US-15: published projects with their price range and availability, ordered by name. */
     List<ProjectSummary> handle(GetPublishedProjectsQuery query);

@@ -120,7 +120,7 @@ class SeparationRequestsIntegrationTest {
         var plan = reservation.getFinancingPlan();
         assertNotNull(plan, "financial keeps the quotation terms");
         assertEquals(12, plan.termMonths());
-        assertEquals(new BigDecimal("12.000"), plan.annualInterestRate());
+        assertEquals(new BigDecimal("12.0000"), plan.annualInterestRate());
         assertEquals(new Money(new BigDecimal("45000"), "PEN"), plan.lotPrice());
         var blocked = reload(lot);
         assertEquals(LotStatus.BLOCKED, blocked.getStatus());

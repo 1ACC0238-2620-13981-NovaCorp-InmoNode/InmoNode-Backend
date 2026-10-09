@@ -15,5 +15,10 @@ import java.util.UUID;
  * @param annualInterestRate the rate of that quotation, as a percentage
  */
 public record RequestWebReservationCommand(UUID sourceEventId, Long lotId, Long buyerId, Money initialAmount,
-                                           int termMonths, BigDecimal annualInterestRate, Instant requestedAt) {
+                                           int termMonths, BigDecimal annualInterestRate, Instant requestedAt,
+                                           Money agreedPrice, Long quotationId) {
+    public RequestWebReservationCommand(UUID sourceEventId, Long lotId, Long buyerId, Money initialAmount,
+                                        int termMonths, BigDecimal annualInterestRate, Instant requestedAt) {
+        this(sourceEventId, lotId, buyerId, initialAmount, termMonths, annualInterestRate, requestedAt, null, null);
+    }
 }

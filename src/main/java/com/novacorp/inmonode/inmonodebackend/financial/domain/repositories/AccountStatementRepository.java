@@ -18,6 +18,9 @@ public interface AccountStatementRepository {
 
     Optional<AccountStatement> findById(Long id);
 
+    /** Refreshes the statement and its installments after acquiring the lot lock. */
+    Optional<AccountStatement> findByIdForUpdate(Long id);
+
     /** The statement opened for the contract, if any: there is at most one. */
     Optional<AccountStatement> findByContractId(Long contractId);
 

@@ -1,0 +1,25 @@
+<configuration>
+    <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
+    <include resource="org/springframework/boot/logging/logback/console-appender.xml"/>
+    <springProperty scope="context" name="AUDIT_DIR" source="audit.directory" defaultValue="logs/audit"/>
+    <appender name="AUDIT_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${AUDIT_DIR}/audit.jsonl</file>
+        <append>true</append>
+        <encoder><pattern>%msg%n</pattern></encoder>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>${AUDIT_DIR}/audit-%d{yyyy-MM-dd}.%i.jsonl.gz</fileNamePattern>
+            <maxFileSize>20MB</maxFileSize>
+            <maxHistory>30</maxHistory>
+            <totalSizeCap>512MB</totalSizeCap>
+        </rollingPolicy>
+    </appender>
+    <appender name="AUDIT_ASYNC" class="ch.qos.logback.classic.AsyncAppender">
+        <queueSize>4096</queueSize>
+        <discardingThreshold>0</discardingThreshold>
+        <neverBlock>false</neverBlock>
+        <maxFlushTime>5000</maxFlushTime>
+        <appender-ref ref="AUDIT_FILE"/>
+    </appender>
+    <logger name="inmonode.audit" level="INFO" additivity="false"><appender-ref ref="AUDIT_ASYNC"/></logger>
+    <root level="INFO"><appender-ref ref="CONSOLE"/></root>
+</configuration>

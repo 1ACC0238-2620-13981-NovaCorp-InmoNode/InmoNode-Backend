@@ -129,7 +129,7 @@ class FieldLotReservedEventHandlerIntegrationTest {
                         .header(HttpHeaders.AUTHORIZATION, bearer(agent))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
-                .andExpect(status().isOk())
+                .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.reservations[1].reservationStatus").value("CANCELLED_BY_CONFLICT"))
                 .andReturn().getResponse().getContentAsString();
     }

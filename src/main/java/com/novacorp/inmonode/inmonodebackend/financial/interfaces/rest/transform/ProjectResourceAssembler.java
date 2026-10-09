@@ -17,6 +17,6 @@ public final class ProjectResourceAssembler {
                 project.getCoverImageUrl(),
                 new FinancingRulesResource(rules.minDownPaymentPercentage(), rules.annualInterestRate(),
                         rules.maxTermMonths(), rules.lateFeeRate()),
-                project.getStatus().name());
+                project.getStatus().name(), project.getStages());
     }
 }

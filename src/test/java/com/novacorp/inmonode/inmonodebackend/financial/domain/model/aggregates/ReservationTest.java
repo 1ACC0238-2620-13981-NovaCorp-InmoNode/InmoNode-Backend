@@ -65,7 +65,7 @@ class ReservationTest {
         var web = Reservation.fromWebRequest(3L, 41L, SOURCE, AMOUNT, PLAN, RESERVED_AT);
 
         assertEquals(PLAN, web.getFinancingPlan());
-        assertEquals(new BigDecimal("12.000"), web.getFinancingPlan().annualInterestRate());
+        assertEquals(new BigDecimal("12.0000"), web.getFinancingPlan().annualInterestRate());
         assertNull(Reservation.fromFieldSync(3L, 7L, PROSPECT, SOURCE, AMOUNT, RESERVED_AT).getFinancingPlan());
         assertThrows(IllegalArgumentException.class,
                 () -> Reservation.fromWebRequest(3L, 41L, SOURCE, Money.of(new BigDecimal("45000")), PLAN, RESERVED_AT),
@@ -192,7 +192,7 @@ class ReservationTest {
 
         assertTrue(reservation.rejectEvidence(evidence.getReference(), 77L, "Voucher ilegible", RESERVED_AT));
 
-        assertEquals(ReservationStatus.BLOCKED, reservation.getStatus());
+        assertEquals(ReservationStatus.REJECTED, reservation.getStatus());
         var rejected = reservation.findEvidence(evidence.getReference()).orElseThrow();
         assertEquals(PaymentEvidenceStatus.REJECTED, rejected.getStatus());
         assertEquals("Voucher ilegible", rejected.getReviewerNote());

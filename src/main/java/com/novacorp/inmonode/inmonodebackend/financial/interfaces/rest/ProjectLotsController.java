@@ -1,6 +1,9 @@
 package com.novacorp.inmonode.inmonodebackend.financial.interfaces.rest;
 
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.queries.GetProjectLotsQuery;
+import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.LotFilters;
+import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.LotStatus;
+import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.MapBounds;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.services.LotCommandService;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.services.ProjectQueryService;
 import com.novacorp.inmonode.inmonodebackend.financial.interfaces.rest.resources.GeoJsonFeatureCollectionResource;
@@ -21,6 +24,9 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.RequestParam;
+
+import java.math.BigDecimal;
 
 @RestController
 @RequestMapping("/api/v1/projects/{projectId}/lots")
@@ -38,11 +44,31 @@ public class ProjectLotsController {
     }
 
     @GetMapping
-    @Operation(summary = "Get the lots of a project as GeoJSON for the interactive map (US-05, US-15)",
+    @Operation(summary = "Get and filter the lots of a project as GeoJSON (US-05, US-15, US-16)",
             description = "A FeatureCollection with one Polygon per lot and its code, measures, price and status. "
-                    + "Public for published projects; for a draft, only CATALOG_ADMIN (404 otherwise).")
-    public ResponseEntity<?> getLots(@PathVariable Long projectId) {
-        var result = projectQueryService.handle(new GetProjectLotsQuery(projectId));
+                    + "Public for published projects; for a draft, only CATALOG_ADMIN (404 otherwise). "
+                    + "Optional inclusive minArea/maxArea (m2), minPrice/maxPrice (PEN), status and WGS84 viewport "
+                    + "west/south/east/north (all four required together). Invalid ranges return 400; no matches "
+                    + "return an empty FeatureCollection. Omitting filters returns the complete map.")
+    public ResponseEntity<?> getLots(@PathVariable Long projectId,
+                                    @RequestParam(required = false) BigDecimal minArea,
+                                    @RequestParam(required = false) BigDecimal maxArea,
+                                    @RequestParam(required = false) BigDecimal minPrice,
+                                    @RequestParam(required = false) BigDecimal maxPrice,
+                                    @RequestParam(required = false) LotStatus status,
+                                    @RequestParam(required = false) Double west,
+                                    @RequestParam(required = false) Double south,
+                                    @RequestParam(required = false) Double east,
+                                    @RequestParam(required = false) Double north) {
+        MapBounds bounds = null;
+        if (west != null || south != null || east != null || north != null) {
+            if (west == null || south == null || east == null || north == null) {
+                throw new IllegalArgumentException("west, south, east and north must be supplied together");
+            }
+            bounds = new MapBounds(west, south, east, north);
+        }
+        var filters = new LotFilters(minArea, maxArea, minPrice, maxPrice, status, bounds);
+        var result = projectQueryService.handle(new GetProjectLotsQuery(projectId, filters));
         return ResponseEntityAssembler.toResponseEntityFromResult(
                 result, LotFeatureCollectionResourceAssembler::toResourceFromLots, HttpStatus.OK);
     }

@@ -49,7 +49,7 @@ public class QuotationEntity extends AuditableAbstractPersistenceEntity {
     @Column(nullable = false)
     private int termMonths;
 
-    @Column(nullable = false, precision = 6, scale = 3)
+    @Column(nullable = false, precision = 7, scale = 4)
     private BigDecimal annualInterestRate;
 
     @Column(nullable = false)

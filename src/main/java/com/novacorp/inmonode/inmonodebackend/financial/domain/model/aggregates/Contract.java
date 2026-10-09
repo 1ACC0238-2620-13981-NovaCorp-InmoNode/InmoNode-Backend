@@ -4,6 +4,7 @@ import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.ContractStatus;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.ReservationChannel;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.ReservationStatus;
+import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.CoOwner;
 import org.jspecify.annotations.Nullable;
 
 import java.time.Instant;
@@ -17,6 +18,7 @@ import java.util.UUID;
  */
 public class Contract {
 
+    private @Nullable CoOwner coOwner;
     private final @Nullable Long id;
     private final Long reservationId;
     private final UUID transactionId;
@@ -74,9 +76,11 @@ public class Contract {
                 || !reservation.getSourceEventId().equals(document.transactionId())) {
             throw new IllegalArgumentException("the document must belong to this saved reservation");
         }
-        return new Contract(null, reservation.getId(), reservation.getSourceEventId(), reservation.getRequesterId(),
+        var contract = new Contract(null, reservation.getId(), reservation.getSourceEventId(), reservation.getRequesterId(),
                 reservation.getLotId(), document.documentId(), document.objectKey(), document.sizeBytes(),
                 ContractStatus.ISSUED, now, issuedBy, null);
+        contract.coOwner = reservation.getCoOwner();
+        return contract;
     }
 
     /**
@@ -108,6 +112,18 @@ public class Contract {
         return new Contract(id, reservationId, transactionId, buyerId, lotId, documentId, objectKey, sizeBytes, status,
                 issuedAt, issuedBy, buyerAcknowledgedAt);
     }
+
+    public static Contract restore(Long id, Long reservationId, UUID transactionId, Long buyerId, Long lotId,
+                                   UUID documentId, String objectKey, long sizeBytes, ContractStatus status,
+                                   Instant issuedAt, Long issuedBy, @Nullable Instant buyerAcknowledgedAt,
+                                   @Nullable CoOwner coOwner) {
+        var contract = restore(id, reservationId, transactionId, buyerId, lotId, documentId, objectKey, sizeBytes,
+                status, issuedAt, issuedBy, buyerAcknowledgedAt);
+        contract.coOwner = coOwner;
+        return contract;
+    }
+
+    public @Nullable CoOwner getCoOwner() { return coOwner; }
 
     public @Nullable Long getId() { return id; }
     public Long getReservationId() { return reservationId; }

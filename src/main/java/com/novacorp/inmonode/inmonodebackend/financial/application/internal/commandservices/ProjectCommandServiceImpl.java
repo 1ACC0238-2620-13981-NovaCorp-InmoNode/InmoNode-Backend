@@ -25,8 +25,8 @@ public class ProjectCommandServiceImpl implements ProjectCommandService {
     @Override
     @Transactional
     public Result<Project, ApplicationError> handle(CreateProjectCommand command) {
-        var project = Project.create(command.name(), command.location(), command.coordinates(),
-                command.coverImageUrl(), command.financingRules());
+        var project = Project.withStages(Project.create(command.name(), command.location(), command.coordinates(),
+                command.coverImageUrl(), command.financingRules()), command.stages());
         return Result.success(projectRepository.save(project));
     }
 
@@ -34,7 +34,7 @@ public class ProjectCommandServiceImpl implements ProjectCommandService {
     @Transactional
     public Result<Project, ApplicationError> handle(PublishProjectCommand command) {
         var projectId = command.projectId();
-        var project = projectRepository.findById(projectId).orElse(null);
+        var project = projectRepository.findByIdForUpdate(projectId).orElse(null);
         if (project == null) {
             return Result.failure(ApplicationError.notFound("project", String.valueOf(projectId)));
         }

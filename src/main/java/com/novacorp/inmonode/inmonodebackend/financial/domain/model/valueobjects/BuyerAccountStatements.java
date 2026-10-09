@@ -27,7 +27,7 @@ public record BuyerAccountStatements(List<Entry> statements) {
         for (var entry : statements) {
             var statement = entry.statement();
             byCurrency.merge(statement.getCurrency(),
-                    new Totals(statement.getCurrency(), 1, statement.paidAmount(), statement.balance()),
+                    new Totals(statement.getCurrency(), 1, statement.getInitialPayment().add(statement.paidAmount()), statement.balance()),
                     Totals::plus);
         }
         return List.copyOf(byCurrency.values());

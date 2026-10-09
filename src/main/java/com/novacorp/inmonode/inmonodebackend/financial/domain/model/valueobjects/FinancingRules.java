@@ -21,7 +21,7 @@ public record FinancingRules(BigDecimal minDownPaymentPercentage, BigDecimal ann
 
     public FinancingRules {
         minDownPaymentPercentage = percentage("minDownPaymentPercentage", minDownPaymentPercentage, 2);
-        annualInterestRate = percentage("annualInterestRate", annualInterestRate, 3);
+        annualInterestRate = percentage("annualInterestRate", annualInterestRate, 4);
         lateFeeRate = percentage("lateFeeRate", lateFeeRate, 3);
         if (maxTermMonths < 1 || maxTermMonths > MAX_TERM_MONTHS) {
             throw new IllegalArgumentException("maxTermMonths must be between 1 and %d".formatted(MAX_TERM_MONTHS));
@@ -35,6 +35,6 @@ public record FinancingRules(BigDecimal minDownPaymentPercentage, BigDecimal ann
         if (value.signum() < 0 || value.compareTo(ONE_HUNDRED) > 0) {
             throw new IllegalArgumentException("%s must be between 0 and 100".formatted(name));
         }
-        return value.setScale(scale, RoundingMode.HALF_UP);
+        return value.setScale(scale, name.equals("annualInterestRate") ? RoundingMode.HALF_EVEN : RoundingMode.HALF_UP);
     }
 }
