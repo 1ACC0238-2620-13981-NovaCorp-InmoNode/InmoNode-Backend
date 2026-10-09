@@ -87,7 +87,7 @@ class PaymentHistoryIntegrationTest {
 
         var afterRejection = historyOf(buyer, transactionId)
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("BLOCKED"))
+                .andExpect(jsonPath("$.status").value("REJECTED"))
                 .andExpect(jsonPath("$.waitingUntil", notNullValue()))
                 .andExpect(jsonPath("$.evidences", hasSize(1)))
                 .andExpect(jsonPath("$.evidences[0].status").value("REJECTED"))
