@@ -11,5 +11,5 @@ import java.util.UUID;
  */
 public record ContractResource(Long id, UUID transactionId, Long reservationId, Long buyerId, Long lotId,
                                String status, long sizeBytes, Instant issuedAt, Long issuedBy,
-                               Instant buyerAcknowledgedAt) {
+                               Instant buyerAcknowledgedAt, CoOwnerResource coOwner) {
 }

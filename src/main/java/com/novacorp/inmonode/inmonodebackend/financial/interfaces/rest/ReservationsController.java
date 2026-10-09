@@ -39,11 +39,11 @@ public class ReservationsController {
     @GetMapping("/account-statement")
     @PreAuthorize("hasRole('BUYER')")
     @Operation(summary = "Get the account statement of a reservation (US-23)",
-            description = "The buyer who made the reservation. It is opened when the buyer agrees to the contract: "
+            description = "The buyer who made the reservation. It is opened when the contract is issued: "
                     + "the down payment, the monthly installments (French amortization of the financed balance, "
                     + "due on the same day of each month in Lima), what was paid, the balance and the progress. "
                     + "dueSoon flags a next installment due within 5 days or already late (US-24). Before the "
-                    + "agreement it answers 404 ACCOUNT_STATEMENT_NOT_FOUND; a reservation that is unknown or "
+                    + "issuance it answers 404 ACCOUNT_STATEMENT_NOT_FOUND; a reservation that is unknown or "
                     + "belongs to someone else answers 404 RESERVATION_NOT_FOUND.")
     public ResponseEntity<?> getAccountStatement(@PathVariable UUID transactionId) {
         var result = accountStatementQueryService.handle(new GetReservationAccountStatementQuery(transactionId));
@@ -56,7 +56,7 @@ public class ReservationsController {
     @Operation(summary = "Get the payment evidences of a reservation (US-25)",
             description = "The buyer (web) or the agent (field) who made the reservation. Approved evidences come "
                     + "with a link to download the voucher, valid for 10 minutes; rejected ones with the reason. "
-                    + "After a rejection the reservation is BLOCKED again until waitingUntil: send a substitute "
+                    + "After a rejection the reservation is REJECTED until waitingUntil: send a substitute "
                     + "voucher with the voucher endpoints and the same reservationId. A reservation that is unknown "
                     + "or belongs to someone else answers 404 RESERVATION_NOT_FOUND.")
     public ResponseEntity<?> getPaymentEvidences(@PathVariable UUID transactionId) {

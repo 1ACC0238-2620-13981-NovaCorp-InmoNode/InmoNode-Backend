@@ -18,6 +18,9 @@ public interface ReservationRepository {
 
     Optional<Reservation> findById(Long id);
 
+    /** Refreshes and locks a reservation after its lot lock was acquired. */
+    Optional<Reservation> findByIdForUpdate(Long id);
+
     /** The reservation generated on a field device with this id, to recognize a re-send (idempotency). */
     Optional<Reservation> findBySourceEventId(UUID sourceEventId);
 

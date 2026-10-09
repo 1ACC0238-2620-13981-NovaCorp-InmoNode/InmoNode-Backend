@@ -6,6 +6,7 @@ import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects
 import com.novacorp.inmonode.inmonodebackend.financial.interfaces.rest.resources.BuyerContractResource;
 import com.novacorp.inmonode.inmonodebackend.financial.interfaces.rest.resources.ContractAcknowledgmentResource;
 import com.novacorp.inmonode.inmonodebackend.financial.interfaces.rest.resources.ContractResource;
+import com.novacorp.inmonode.inmonodebackend.financial.interfaces.rest.resources.CoOwnerResource;
 import com.novacorp.inmonode.inmonodebackend.financial.interfaces.rest.resources.ContractUploadResource;
 
 public final class ContractResourceAssembler {
@@ -15,7 +16,9 @@ public final class ContractResourceAssembler {
     public static ContractResource toResourceFromContract(Contract contract) {
         return new ContractResource(contract.getId(), contract.getTransactionId(), contract.getReservationId(),
                 contract.getBuyerId(), contract.getLotId(), contract.getStatus().name(), contract.getSizeBytes(),
-                contract.getIssuedAt(), contract.getIssuedBy(), contract.getBuyerAcknowledgedAt());
+                contract.getIssuedAt(), contract.getIssuedBy(), contract.getBuyerAcknowledgedAt(),
+                contract.getCoOwner() == null ? null : new CoOwnerResource(contract.getCoOwner().fullName(),
+                        contract.getCoOwner().documentType(), contract.getCoOwner().documentNumber()));
     }
 
     public static BuyerContractResource toResourceFromReservationContract(ReservationContract view) {
@@ -23,7 +26,9 @@ public final class ContractResourceAssembler {
         return new BuyerContractResource(view.reservation().getSourceEventId(), view.availability().name(),
                 contract == null ? null : contract.getId(), contract == null ? null : contract.getIssuedAt(),
                 view.downloadUrl() == null ? null : view.downloadUrl().toString(), view.downloadExpiresAt(),
-                contract == null ? null : contract.getBuyerAcknowledgedAt());
+                contract == null ? null : contract.getBuyerAcknowledgedAt(),
+                contract == null || contract.getCoOwner() == null ? null : new CoOwnerResource(contract.getCoOwner().fullName(),
+                        contract.getCoOwner().documentType(), contract.getCoOwner().documentNumber()));
     }
 
     public static ContractAcknowledgmentResource toAcknowledgmentFromContract(Contract contract) {

@@ -31,7 +31,7 @@ import java.util.Objects;
 
 /**
  * A payment and the review lock the lot first, as every other decision about it: two changes of the same statement
- * are made one after the other, so the payment that pays it off always sees the others and sells the lot, and the
+ * are made one after the other, so each payment sees the others, and the
  * review never overwrites a payment with a late fee.
  */
 @Service
@@ -67,11 +67,24 @@ public class AccountStatementCommandServiceImpl implements AccountStatementComma
      */
     @Override
     public InstallmentReviewSummary handle(ReviewInstallmentsCommand command) {
-        var asOfDate = command.asOfDate();
+        return reviewAll(command.asOfDate(), true, true);
+    }
+
+    @Override
+    public InstallmentReviewSummary handle(com.novacorp.inmonode.inmonodebackend.financial.domain.model.commands.NotifyUpcomingInstallmentsCommand command) {
+        return reviewAll(command.asOfDate(), true, false);
+    }
+
+    @Override
+    public InstallmentReviewSummary handle(com.novacorp.inmonode.inmonodebackend.financial.domain.model.commands.MarkOverdueInstallmentsCommand command) {
+        return reviewAll(command.asOfDate(), false, true);
+    }
+
+    private InstallmentReviewSummary reviewAll(LocalDate asOfDate, boolean remind, boolean markOverdue) {
         var summary = InstallmentReviewSummary.NONE;
         for (var statementId : accountStatementRepository.findIdsToReview(asOfDate, AccountStatement.DUE_SOON_DAYS)) {
             try {
-                var reviewed = transactionTemplate.execute(status -> review(statementId, asOfDate));
+                var reviewed = transactionTemplate.execute(status -> review(statementId, asOfDate, remind, markOverdue));
                 summary = summary.plus(Objects.requireNonNull(reviewed));
             } catch (RuntimeException ex) {
                 LOG.error("Could not review the installments of account statement {}", statementId, ex);
@@ -80,13 +93,13 @@ public class AccountStatementCommandServiceImpl implements AccountStatementComma
         return summary;
     }
 
-    private InstallmentReviewSummary review(Long statementId, LocalDate asOfDate) {
+    private InstallmentReviewSummary review(Long statementId, LocalDate asOfDate, boolean remind, boolean markOverdue) {
         var lotId = accountStatementRepository.findById(statementId).orElseThrow().getLotId();
         var lot = lotRepository.findByIdForUpdate(lotId).orElseThrow();
         // Read under the lock: a payment may have changed it.
-        var statement = accountStatementRepository.findById(statementId).orElseThrow();
+        var statement = accountStatementRepository.findByIdForUpdate(statementId).orElseThrow();
         var project = projectRepository.findById(lot.getProjectId()).orElseThrow();
-        var overdue = statement.markOverdueInstallments(asOfDate, project.getFinancingRules().lateFeeRate());
+        var overdue = markOverdue ? statement.markOverdueInstallments(asOfDate, project.getFinancingRules().lateFeeRate()) : java.util.List.<Installment>of();
         var email = externalIamService.emailOf(statement.getBuyerId()).orElse(null);
         var overdueNotices = 0;
         var reminders = 0;
@@ -95,13 +108,13 @@ public class AccountStatementCommandServiceImpl implements AccountStatementComma
                     statementId);
         } else {
             var now = clock.instant().truncatedTo(ChronoUnit.MICROS);
-            for (var installment : statement.overdueInstallmentsToNotify()) {
+            for (var installment : markOverdue ? statement.overdueInstallmentsToNotify() : java.util.List.<Installment>of()) {
                 if (paymentNotificationSender.notifyOverdue(notice(email, statement, project, lot, installment))) {
                     statement.recordOverdueNotice(installment.getNumber(), now);
                     overdueNotices++;
                 }
             }
-            for (var installment : statement.installmentsToRemind(asOfDate)) {
+            for (var installment : remind ? statement.installmentsToRemind(asOfDate) : java.util.List.<Installment>of()) {
                 if (paymentNotificationSender.remindUpcoming(notice(email, statement, project, lot, installment))) {
                     statement.recordReminder(installment.getNumber(), now);
                     reminders++;
@@ -131,7 +144,7 @@ public class AccountStatementCommandServiceImpl implements AccountStatementComma
         }
         var lot = lotRepository.findByIdForUpdate(lotId).orElseThrow();
         // Read under the lock: another payment may have changed it.
-        var statement = accountStatementRepository.findById(statementId).orElseThrow();
+        var statement = accountStatementRepository.findByIdForUpdate(statementId).orElseThrow();
         var number = command.installmentNumber();
         var installment = statement.findInstallment(number).orElse(null);
         if (installment == null) {
@@ -155,13 +168,7 @@ public class AccountStatementCommandServiceImpl implements AccountStatementComma
         }
         statement.registerInstallmentPayment(number, command.amount(), paidAt);
         var saved = accountStatementRepository.save(statement);
-        if (saved.isFullyPaid()) {
-            if (!lot.markSold(saved.getReservationId())) {
-                throw new IllegalStateException("lot %d is not reserved for reservation %s"
-                        .formatted(lotId, saved.getTransactionId()));
-            }
-            lotRepository.save(lot);
-        }
+        // SOLD is a legal-contract transition (US-56), independent of the payment balance.
         var today = LocalDate.ofInstant(now, AccountStatement.SALES_ZONE);
         return Result.success(new AccountStatementView(saved, saved.isDueSoon(today)));
     }

@@ -24,15 +24,15 @@ class AmortizationScheduleTest {
 
         assertEquals(12, schedule.size());
         var first = schedule.getFirst();
-        assertEquals(new BigDecimal("3198.56"), first.getAmount());
-        assertEquals(new BigDecimal("360.00"), first.getInterest());
-        assertEquals(new BigDecimal("2838.56"), first.getPrincipal());
+        assertEquals(new BigDecimal("3188.23"), first.getAmount());
+        assertEquals(new BigDecimal("341.60"), first.getInterest());
+        assertEquals(new BigDecimal("2846.63"), first.getPrincipal());
         schedule.subList(0, 11).forEach(installment ->
-                assertEquals(new BigDecimal("3198.56"), installment.getAmount()));
-        assertEquals(new BigDecimal("3198.50"), schedule.getLast().getAmount(),
+                assertEquals(new BigDecimal("3188.23"), installment.getAmount()));
+        assertEquals(new BigDecimal("3188.28"), schedule.getLast().getAmount(),
                 "the last installment absorbs the rounding");
         assertEquals(new BigDecimal("36000.00"), sum(schedule, Installment::getPrincipal));
-        assertEquals(new BigDecimal("2382.66"), sum(schedule, Installment::getInterest));
+        assertEquals(new BigDecimal("2258.81"), sum(schedule, Installment::getInterest));
     }
 
     @Test
@@ -78,7 +78,7 @@ class AmortizationScheduleTest {
         var schedule = AmortizationSchedule.french(new BigDecimal("36000"), new BigDecimal("12"), 1, START);
 
         assertEquals(1, schedule.size());
-        assertEquals(new BigDecimal("36360.00"), schedule.getFirst().getAmount());
+        assertEquals(new BigDecimal("36341.60"), schedule.getFirst().getAmount());
         assertEquals(new BigDecimal("36000.00"), schedule.getFirst().getPrincipal());
     }
 

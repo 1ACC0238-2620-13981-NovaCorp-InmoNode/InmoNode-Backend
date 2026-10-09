@@ -14,6 +14,8 @@ import com.novacorp.inmonode.inmonodebackend.shared.application.result.Applicati
 import com.novacorp.inmonode.inmonodebackend.shared.application.result.Result;
 import org.jspecify.annotations.Nullable;
 import org.springframework.stereotype.Service;
+import com.novacorp.inmonode.inmonodebackend.financial.domain.model.commands.RegisterLotCommand;
+import com.novacorp.inmonode.inmonodebackend.financial.domain.model.commands.PublishLotCommand;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
@@ -35,9 +37,11 @@ public class LotCommandServiceImpl implements LotCommandService {
     @Transactional
     public Result<LotImportResult, ApplicationError> handle(ImportLotsCommand command) {
         var projectId = command.projectId();
-        if (!projectRepository.existsById(projectId)) {
+        var project = projectRepository.findByIdForUpdate(projectId).orElse(null);
+        if (project == null) {
             return Result.failure(ApplicationError.notFound("project", String.valueOf(projectId)));
         }
+        var stage = project.getStages().getFirst();
         var usedCodes = new HashSet<>(lotRepository.findCodesByProjectId(projectId));
         var accepted = new ArrayList<Lot>();
         var rejected = new ArrayList<RejectedLot>();
@@ -46,6 +50,7 @@ public class LotCommandServiceImpl implements LotCommandService {
             try {
                 var lot = Lot.register(projectId, data.code(), new LotDimensions(data.area(), data.front(), data.depth()),
                         price(data.price()), LotBoundary.fromPolygonRings(data.polygon()));
+                Lot.withStage(lot, stage);
                 if (usedCodes.add(lot.getCode())) {
                     accepted.add(lot);
                 } else {
@@ -58,6 +63,33 @@ public class LotCommandServiceImpl implements LotCommandService {
         }
         lotRepository.saveAll(accepted);
         return Result.success(new LotImportResult(accepted.size(), rejected));
+    }
+
+    @Override
+    @Transactional
+    public Result<Lot, ApplicationError> handle(RegisterLotCommand command) {
+        var project = projectRepository.findByIdForUpdate(command.projectId()).orElse(null);
+        if (project == null) return Result.failure(ApplicationError.notFound("project", String.valueOf(command.projectId())));
+        var stage = project.getStages().stream().filter(name -> name.equalsIgnoreCase(command.stageName().strip()))
+                .findFirst().orElse(null);
+        if (stage == null) return Result.failure(ApplicationError.validationError("stageName", "stageName does not belong to this project"));
+        var code = Lot.normalizeCode(command.code());
+        if (lotRepository.findCodesByProjectId(command.projectId()).contains(code)) {
+            return Result.failure(ApplicationError.conflict("lot", "the code is already used in this project"));
+        }
+        return Result.success(lotRepository.save(Lot.registerDraft(command.projectId(), stage, code,
+                command.dimensions(), command.price(), command.boundary())));
+    }
+
+    @Override
+    @Transactional
+    public Result<Lot, ApplicationError> handle(PublishLotCommand command) {
+        var lot = lotRepository.findByIdForUpdate(command.lotId()).orElse(null);
+        if (lot == null) return Result.failure(ApplicationError.notFound("lot", String.valueOf(command.lotId())));
+        var project = projectRepository.findById(lot.getProjectId()).orElseThrow();
+        if (!project.isPublished()) return Result.failure(ApplicationError.businessRuleViolation("lot-publication", "Publish the project before publishing its lots"));
+        if (!project.getStages().contains(lot.getStageName())) return Result.failure(ApplicationError.validationError("stageName", "stageName does not belong to this project"));
+        return Result.success(lot.publish() ? lotRepository.save(lot) : lot);
     }
 
     private static Money price(@Nullable BigDecimal amount) {

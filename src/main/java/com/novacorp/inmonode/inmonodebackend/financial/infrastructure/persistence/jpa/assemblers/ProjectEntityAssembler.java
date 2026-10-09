@@ -18,8 +18,8 @@ public final class ProjectEntityAssembler {
                 : new GeoPoint(entity.getLatitude(), entity.getLongitude());
         var financingRules = new FinancingRules(entity.getMinDownPaymentPercentage(),
                 entity.getAnnualInterestRate(), entity.getMaxTermMonths(), entity.getLateFeeRate());
-        return Project.restore(entity.getId(), entity.getName(), entity.getLocation(), coordinates,
-                entity.getCoverImageUrl(), financingRules, entity.getStatus());
+        return Project.withStages(Project.restore(entity.getId(), entity.getName(), entity.getLocation(), coordinates,
+                entity.getCoverImageUrl(), financingRules, entity.getStatus()), entity.getStages());
     }
 
     /** Copies the aggregate state onto the entity; audit columns and id stay untouched. */
@@ -36,6 +36,10 @@ public final class ProjectEntityAssembler {
         entity.setMaxTermMonths(financingRules.maxTermMonths());
         entity.setLateFeeRate(financingRules.lateFeeRate());
         entity.setStatus(project.getStatus());
+        if (!entity.getStages().equals(project.getStages())) {
+            entity.getStages().clear();
+            entity.getStages().addAll(project.getStages());
+        }
         return entity;
     }
 }

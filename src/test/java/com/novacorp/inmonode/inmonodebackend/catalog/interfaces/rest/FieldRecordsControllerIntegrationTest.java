@@ -81,7 +81,7 @@ class FieldRecordsControllerIntegrationTest {
         sync(agent, payload(List.of(prospect(ana, "12345678", "Ana Quispe"), prospect(luis, "87654321", "Luis Mamani")),
                 List.of(reservation(first, lots.get("A-01"), ana), reservation(second, lots.get("A-02"), luis),
                         reservation(third, lots.get("A-01"), luis))))
-                .andExpect(status().isOk())
+                .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.prospectsSynced").value(2))
                 .andExpect(jsonPath("$.reservations.length()").value(3))
                 .andExpect(jsonPath("$.reservations[0].id").value(first.toString()))
@@ -114,10 +114,10 @@ class FieldRecordsControllerIntegrationTest {
         var body = payload(List.of(prospect(ana, "12345678", "Ana Quispe")),
                 List.of(reservation(UUID.randomUUID(), lots.get("A-01"), ana),
                         reservation(UUID.randomUUID(), lots.get("A-01"), ana)));
-        sync(agent, body).andExpect(status().isOk());
+        sync(agent, body).andExpect(status().isCreated());
 
         sync(agent, body)
-                .andExpect(status().isOk())
+                .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.prospectsSynced").value(1))
                 .andExpect(jsonPath("$.reservations[0].result").value("DUPLICATE"))
                 .andExpect(jsonPath("$.reservations[0].originalResult").value("SYNCED"))
@@ -137,7 +137,7 @@ class FieldRecordsControllerIntegrationTest {
                 List.of(reservation(taken, lots.get("A-01"), ana),
                         reservation(UUID.randomUUID(), lots.get("A-01"), ana)));
 
-        sync(agent, body).andExpect(status().isOk());
+        sync(agent, body).andExpect(status().isCreated());
 
         var announced = events.stream(FieldLotReservedEvent.class).toList();
         assertEquals(1, announced.size(), "the conflicting reservation is not announced");
@@ -186,7 +186,7 @@ class FieldRecordsControllerIntegrationTest {
         sync(otherAgent, payload(List.of(prospect(ofAnotherAgent, "87654321", "Luis Mamani")), List.of()));
 
         sync(agent, payload(List.of(), List.of(reservation(UUID.randomUUID(), lots.get("A-01"), sentBefore))))
-                .andExpect(status().isOk())
+                .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.reservations[0].result").value("SYNCED"));
         var rejected = UUID.randomUUID();
         sync(agent, payload(List.of(), List.of(reservation(rejected, lots.get("A-02"), ofAnotherAgent))))
@@ -199,7 +199,7 @@ class FieldRecordsControllerIntegrationTest {
     void onlyFieldAgentsCanSync() throws Exception {
         var body = payload(List.of(), List.of());
 
-        sync(AGENTS.incrementAndGet(), body).andExpect(status().isOk())
+        sync(AGENTS.incrementAndGet(), body).andExpect(status().isCreated())
                 .andExpect(jsonPath("$.prospectsSynced").value(0));
         mockMvc.perform(post("/api/v1/field-sync").header(HttpHeaders.AUTHORIZATION, bearer(Role.BUYER, 1L))
                         .contentType(MediaType.APPLICATION_JSON).content(body))

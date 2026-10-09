@@ -33,13 +33,16 @@ public class ReservationCommandServiceImpl implements ReservationCommandService 
     private final ReservationRepository reservationRepository;
     private final ProjectRepository projectRepository;
     private final Clock clock;
+    private final com.novacorp.inmonode.inmonodebackend.financial.application.internal.outboundservices.notifications.FinancialNotificationOutbox notifications;
 
     public ReservationCommandServiceImpl(LotRepository lotRepository, ReservationRepository reservationRepository,
-                                         ProjectRepository projectRepository, Clock clock) {
+                                         ProjectRepository projectRepository, Clock clock,
+            com.novacorp.inmonode.inmonodebackend.financial.application.internal.outboundservices.notifications.FinancialNotificationOutbox notifications) {
         this.lotRepository = lotRepository;
         this.reservationRepository = reservationRepository;
         this.projectRepository = projectRepository;
         this.clock = clock;
+        this.notifications = notifications;
     }
 
     /**
@@ -102,12 +105,17 @@ public class ReservationCommandServiceImpl implements ReservationCommandService 
         if (!lot.isAvailable(now)) {
             return WebReservationOutcome.unavailable();
         }
-        // The plan applies the quotation terms to the price the lot has now, under the lock.
-        var plan = new FinancingPlan(lot.getPrice(), command.termMonths(), command.annualInterestRate());
+        // Freeze the accepted quotation, even when the catalog price changed in the meantime.
+        var agreedPrice = command.agreedPrice() == null ? lot.getPrice() : command.agreedPrice();
+        var plan = new FinancingPlan(agreedPrice, command.termMonths(), command.annualInterestRate(), command.quotationId());
         var reservation = reservationRepository.save(Reservation.fromWebRequest(command.lotId(), command.buyerId(),
                 command.sourceEventId(), command.initialAmount(), plan, command.requestedAt()));
         lot.block(Objects.requireNonNull(reservation.getId()), now, ReservationChannel.WEB.blockValidity());
         var blocked = lotRepository.save(lot);
+        notifications.enqueue("web-reservation:" + command.sourceEventId(), "@finance", "Nueva separación web",
+                "Transacción: " + command.sourceEventId() + "\nComprador: " + command.buyerId()
+                        + "\nLote: " + command.lotId() + "\nInicial: " + command.initialAmount().amount()
+                        + " " + command.initialAmount().currency() + "\nPlazo de bloqueo: " + blocked.getBlockedUntil());
         return WebReservationOutcome.blocked(reservation, Objects.requireNonNull(blocked.getBlockedUntil()));
     }
 
@@ -137,10 +145,10 @@ public class ReservationCommandServiceImpl implements ReservationCommandService 
     @Override
     @Transactional
     public PaymentEvidence handle(ReceiveVoucherEvidenceCommand command) {
-        var lotId = reservationRepository.findBySourceEventId(command.reservationId())
-                .map(Reservation::getLotId)
+        var found = reservationRepository.findBySourceEventId(command.reservationId())
                 .orElseThrow(() -> new IllegalStateException("no reservation %s for the payment evidence %s"
                         .formatted(command.reservationId(), command.voucherId())));
+        var lotId = found.getLotId();
         var lot = lotRepository.findByIdForUpdate(lotId)
                 .orElseThrow(() -> new IllegalStateException("lot %d of reservation %s does not exist"
                         .formatted(lotId, command.reservationId())));
@@ -149,7 +157,7 @@ public class ReservationCommandServiceImpl implements ReservationCommandService 
             lotRepository.save(lot);
         }
         // Read under the lock: releasing the block may have expired it.
-        var reservation = reservationRepository.findBySourceEventId(command.reservationId()).orElseThrow();
+        var reservation = reservationRepository.findByIdForUpdate(found.getId()).orElseThrow();
         var received = reservation.findEvidence(command.voucherId());
         if (received.isPresent()) {
             return received.get();
@@ -163,7 +171,14 @@ public class ReservationCommandServiceImpl implements ReservationCommandService 
             }
             lotRepository.save(lot);
         }
-        return reservationRepository.save(reservation).findEvidence(command.voucherId()).orElseThrow();
+        var saved = reservationRepository.save(reservation).findEvidence(command.voucherId()).orElseThrow();
+        if (reservation.getChannel() == ReservationChannel.WEB && !saved.isLate()) {
+            notifications.enqueue("web-voucher:" + command.voucherId(), "@finance", "Comprobante web pendiente de revisión",
+                    "Transacción: " + command.reservationId() + "\nComprobante: " + command.voucherId()
+                            + "\nLote: " + lotId + "\nMonto: " + command.amount().amount() + " " + command.amount().currency()
+                            + "\nOperación: " + command.operationCode() + "\nRecibido: " + command.submittedAt());
+        }
+        return saved;
     }
 
     /**

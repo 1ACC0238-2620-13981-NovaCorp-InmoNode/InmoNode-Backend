@@ -18,7 +18,7 @@ import java.util.UUID;
 
 /**
  * Account statement of a buyer for a lot (2.6.4.1, US-23): the real schedule of installments that pays the financed
- * balance, opened when the buyer agrees to the contract. It refers to its {@link Contract} and its
+ * balance, opened when the contract is issued. It refers to its {@link Contract} and its
  * {@link Reservation} by id and keeps the figures it was opened with, so it stays as agreed even if the project
  * changes. Amounts are in {@code currency}, at two decimals.
  */
@@ -66,7 +66,7 @@ public class AccountStatement {
     }
 
     /**
-     * Opens the statement of a contract the buyer agreed to, with the financing plan of its reservation; the first
+     * Opens the statement of an issued contract, with the financing plan of its reservation; the first
      * installment falls due one month after the day (in Lima) it is opened.
      *
      * @throws IllegalArgumentException when the contract is not of this reservation or the reservation has no plan
@@ -81,9 +81,21 @@ public class AccountStatement {
         var financed = plan.lotPrice().amount().subtract(initial.amount());
         var schedule = AmortizationSchedule.french(financed, plan.annualInterestRate(), plan.termMonths(),
                 LocalDate.ofInstant(now, SALES_ZONE));
+        return open(contract, reservation, now, schedule);
+    }
+
+    /** Uses the accepted quotation amounts and rebased dates instead of recalculating persisted commercial terms. */
+    public static AccountStatement open(Contract contract, Reservation reservation, Instant now, List<Installment> schedule) {
+        var plan = reservation.getFinancingPlan();
+        if (plan == null || contract.getId() == null || !contract.getReservationId().equals(reservation.getId())
+                || schedule.size() != plan.termMonths()) throw new IllegalArgumentException("invalid agreed schedule");
+        var principal = schedule.stream().map(Installment::getPrincipal).reduce(BigDecimal.ZERO, BigDecimal::add);
+        if (principal.compareTo(plan.lotPrice().amount().subtract(reservation.getInitialAmount().amount())) != 0) {
+            throw new IllegalArgumentException("schedule principal does not match agreed financing");
+        }
         return new AccountStatement(null, contract.getId(), reservation.getId(), contract.getTransactionId(),
                 contract.getBuyerId(), contract.getLotId(), plan.lotPrice().currency(), plan.lotPrice().amount(),
-                initial.amount(), plan.termMonths(), plan.annualInterestRate(), now, schedule);
+                reservation.getInitialAmount().amount(), plan.termMonths(), plan.annualInterestRate(), now, schedule);
     }
 
     /** Rebuilds an already persisted statement. */
@@ -99,18 +111,15 @@ public class AccountStatement {
         return lotPrice.subtract(initialPayment);
     }
 
-    /** What the purchase costs in all: the down payment, every installment and the late fees incurred. */
+    /** Scheduled installments (principal plus interest), excluding the already verified initial payment and penalties. */
     public BigDecimal totalAmount() {
-        return installments.stream().map(Installment::amountDue).reduce(initialPayment, BigDecimal::add);
+        return installments.stream().map(Installment::getAmount).reduce(BigDecimal.ZERO.setScale(2), BigDecimal::add);
     }
 
-    /** US-23: the down payment plus every installment paid. */
+    /** US-23: amounts paid toward scheduled installments, excluding late fees. */
     public BigDecimal paidAmount() {
-        return installments.stream()
-                .filter(Installment::isPaid)
-                .map(installment -> installment.getPaidAmount() == null ? installment.amountDue()
-                        : installment.getPaidAmount())
-                .reduce(initialPayment, BigDecimal::add);
+        return installments.stream().filter(Installment::isPaid).map(Installment::getAmount)
+                .reduce(BigDecimal.ZERO.setScale(2), BigDecimal::add);
     }
 
     /** US-23: what is still owed, late fees included. */
@@ -124,7 +133,8 @@ public class AccountStatement {
     /** US-23: the share of the total already paid, as a percentage with two decimals. */
     public BigDecimal progressPercentage() {
         var paid = paidAmount();
-        var total = paid.add(balance());
+        var total = totalAmount();
+        if (total.signum() == 0) return BigDecimal.valueOf(100).setScale(2);
         return paid.multiply(ONE_HUNDRED).divide(total, 2, RoundingMode.HALF_UP);
     }
 
@@ -135,7 +145,7 @@ public class AccountStatement {
     }
 
     public boolean isFullyPaid() {
-        return installments.stream().allMatch(Installment::isPaid);
+        return balance().signum() == 0;
     }
 
     public Optional<Installment> findInstallment(int number) {

@@ -61,7 +61,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * A buyer gets the account statement of their web separation when they agree to the contract (US-23), end to end over
+ * A buyer gets the account statement of their web separation when the contract is issued (US-23), end to end over
  * HTTP against a real PostgreSQL and a real S3-compatible storage: quote, separate, payment, verification, issuing and
  * agreement. Each test uses its own buyers and lot.
  */
@@ -100,7 +100,7 @@ class AccountStatementIntegrationTest {
     private ReservationCommandService reservationCommandService;
 
     @Test
-    void theAgreementOpensTheStatementWithTheQuotedSchedule() throws Exception {
+    void issuingOpensTheStatementBeforeAcknowledgmentWithTheQuotedSchedule() throws Exception {
         var buyer = BUYERS.incrementAndGet();
         var lot = lot();
         var quotation = quote(buyer, lot);
@@ -109,8 +109,8 @@ class AccountStatementIntegrationTest {
         var contractId = issue(buyer, transactionId);
 
         statementOf(buyer, transactionId)
-                .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.code").value("ACCOUNT_STATEMENT_NOT_FOUND"));
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.paidAmount").value(0.00));
 
         acknowledge(buyer, contractId).andExpect(status().isOk());
         var answer = statementOf(buyer, transactionId)
@@ -124,18 +124,18 @@ class AccountStatementIntegrationTest {
                 .andExpect(jsonPath("$.financedAmount").value(36000.00))
                 .andExpect(jsonPath("$.termMonths").value(12))
                 .andExpect(jsonPath("$.annualInterestRate").value(12.0))
-                .andExpect(jsonPath("$.totalAmount").value(47382.66))
-                .andExpect(jsonPath("$.paidAmount").value(9000.00))
-                .andExpect(jsonPath("$.balance").value(38382.66))
-                .andExpect(jsonPath("$.progressPercentage").value(18.99))
+                .andExpect(jsonPath("$.totalAmount").value(38258.81))
+                .andExpect(jsonPath("$.paidAmount").value(0.00))
+                .andExpect(jsonPath("$.balance").value(38258.81))
+                .andExpect(jsonPath("$.progressPercentage").value(0.00))
                 .andExpect(jsonPath("$.fullyPaid").value(false))
                 .andExpect(jsonPath("$.dueSoon").value(false))
                 .andExpect(jsonPath("$.nextInstallment.number").value(1))
                 .andExpect(jsonPath("$.installments", hasSize(12)))
                 .andExpect(jsonPath("$.installments[0].status").value("PENDING"))
                 .andExpect(jsonPath("$.installments[0].penalty").value(0.00))
-                .andExpect(jsonPath("$.installments[0].amountDue").value(3198.56))
-                .andExpect(jsonPath("$.installments[11].amount").value(3198.50))
+                .andExpect(jsonPath("$.installments[0].amountDue").value(3188.23))
+                .andExpect(jsonPath("$.installments[11].amount").value(3188.28))
                 .andReturn().getResponse().getContentAsString();
 
         var quotedAmounts = JsonPath.<List<Number>>read(quotation, "$.installments[*].amount");
@@ -176,7 +176,7 @@ class AccountStatementIntegrationTest {
     }
 
     @Test
-    void theBackOfficeRecordsPaymentsAndTheLastOneSellsTheLot() throws Exception {
+    void payingOffDoesNotReplaceTheVerifiedSignatureRequiredToSellTheLot() throws Exception {
         var buyer = BUYERS.incrementAndGet();
         var lot = lot();
         var transactionId = separate(buyer, lot, quote(buyer, lot));
@@ -185,47 +185,47 @@ class AccountStatementIntegrationTest {
         var statementId = statementIdOf(buyer, transactionId);
 
         var paidAt = Instant.now().minus(1, ChronoUnit.DAYS).truncatedTo(ChronoUnit.SECONDS);
-        pay(statementId, 2, "{\"amount\": 3198.56, \"paidAt\": \"%s\"}".formatted(paidAt))
+        pay(statementId, 2, "{\"amount\": 3188.23, \"paidAt\": \"%s\"}".formatted(paidAt))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(statementId))
                 .andExpect(jsonPath("$.installments[1].status").value("PAID"))
-                .andExpect(jsonPath("$.installments[1].paidAmount").value(3198.56))
+                .andExpect(jsonPath("$.installments[1].paidAmount").value(3188.23))
                 .andExpect(jsonPath("$.installments[1].paidAt").value(paidAt.toString()))
-                .andExpect(jsonPath("$.paidAmount").value(12198.56))
-                .andExpect(jsonPath("$.balance").value(35184.10))
+                .andExpect(jsonPath("$.paidAmount").value(3188.23))
+                .andExpect(jsonPath("$.balance").value(35070.58))
                 .andExpect(jsonPath("$.nextInstallment.number").value(1))
                 .andExpect(jsonPath("$.fullyPaid").value(false));
         statementOf(buyer, transactionId)
                 .andExpect(jsonPath("$.installments[1].status").value("PAID"))
-                .andExpect(jsonPath("$.balance").value(35184.10));
+                .andExpect(jsonPath("$.balance").value(35070.58));
 
-        pay(statementId, 2, "{\"amount\": 3198.56}")
+        pay(statementId, 2, "{\"amount\": 3188.23}")
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("INSTALLMENT_CONFLICT"));
         pay(statementId, 1, "{\"amount\": 3000}")
                 .andExpect(status().isUnprocessableEntity())
                 .andExpect(jsonPath("$.code").value("BUSINESS_RULE_VIOLATION"))
-                .andExpect(jsonPath("$.details").value(containsString("3198.56 PEN")));
+                .andExpect(jsonPath("$.details").value(containsString("3188.23 PEN")));
 
         for (var number = 1; number <= 11; number++) {
             if (number != 2) {
-                pay(statementId, number, "{\"amount\": 3198.56}").andExpect(status().isOk());
+                pay(statementId, number, "{\"amount\": 3188.23}").andExpect(status().isOk());
             }
         }
         assertEquals(LotStatus.RESERVED, lotRepository.findById(lot.getId()).orElseThrow().getStatus());
-        pay(statementId, 12, "{\"amount\": 3198.50}")
+        pay(statementId, 12, "{\"amount\": 3188.28}")
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.fullyPaid").value(true))
                 .andExpect(jsonPath("$.balance").value(0.00))
-                .andExpect(jsonPath("$.paidAmount").value(47382.66))
+                .andExpect(jsonPath("$.paidAmount").value(38258.81))
                 .andExpect(jsonPath("$.progressPercentage").value(100.00))
                 .andExpect(jsonPath("$.nextInstallment", nullValue()))
                 .andExpect(jsonPath("$.dueSoon").value(false));
 
-        assertEquals(LotStatus.SOLD, lotRepository.findById(lot.getId()).orElseThrow().getStatus());
+        assertEquals(LotStatus.RESERVED, lotRepository.findById(lot.getId()).orElseThrow().getStatus());
         mockMvc.perform(get("/api/v1/projects/{id}/lots", lot.getProjectId()))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.features[0].properties.status").value("SOLD"));
+                .andExpect(jsonPath("$.features[0].properties.status").value("RESERVED"));
         statementOf(buyer, transactionId).andExpect(jsonPath("$.fullyPaid").value(true));
     }
 
@@ -238,13 +238,13 @@ class AccountStatementIntegrationTest {
         acknowledge(buyer, issue(buyer, transactionId)).andExpect(status().isOk());
         var statementId = statementIdOf(buyer, transactionId);
 
-        pay(999_999L, 1, "{\"amount\": 3198.56}")
+        pay(999_999L, 1, "{\"amount\": 3188.23}")
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("ACCOUNT_STATEMENT_NOT_FOUND"));
-        pay(statementId, 13, "{\"amount\": 3198.56}")
+        pay(statementId, 13, "{\"amount\": 3188.23}")
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("INSTALLMENT_NOT_FOUND"));
-        pay(statementId, 1, "{\"amount\": 3198.56, \"paidAt\": \"%s\"}"
+        pay(statementId, 1, "{\"amount\": 3188.23, \"paidAt\": \"%s\"}"
                 .formatted(Instant.now().plus(1, ChronoUnit.DAYS)))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
@@ -252,14 +252,14 @@ class AccountStatementIntegrationTest {
         pay(statementId, 1, "{}").andExpect(status().isBadRequest());
         mockMvc.perform(post("/api/v1/account-statements/{id}/installments/1/payment", statementId)
                         .header(HttpHeaders.AUTHORIZATION, bearer(Role.BUYER, buyer))
-                        .contentType(MediaType.APPLICATION_JSON).content("{\"amount\": 3198.56}"))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"amount\": 3188.23}"))
                 .andExpect(status().isForbidden());
         mockMvc.perform(post("/api/v1/account-statements/{id}/installments/1/payment", statementId)
-                        .contentType(MediaType.APPLICATION_JSON).content("{\"amount\": 3198.56}"))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"amount\": 3188.23}"))
                 .andExpect(status().isUnauthorized());
 
         statementOf(buyer, transactionId)
-                .andExpect(jsonPath("$.paidAmount").value(9000.00))
+                .andExpect(jsonPath("$.paidAmount").value(0.00))
                 .andExpect(jsonPath("$.installments[0].status").value("PENDING"));
     }
 
@@ -274,16 +274,16 @@ class AccountStatementIntegrationTest {
         var second = separate(buyer, secondLot, quote(buyer, secondLot));
         approve(sendVoucher(second));
         acknowledge(buyer, issue(buyer, second)).andExpect(status().isOk());
-        pay(statementIdOf(buyer, first), 1, "{\"amount\": 3198.56}").andExpect(status().isOk());
+        pay(statementIdOf(buyer, first), 1, "{\"amount\": 3188.23}").andExpect(status().isOk());
 
         mine(buyer)
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.totals", hasSize(1)))
                 .andExpect(jsonPath("$.totals[0].currency").value("PEN"))
                 .andExpect(jsonPath("$.totals[0].lots").value(2))
-                .andExpect(jsonPath("$.totals[0].invested").value(21198.56))
-                .andExpect(jsonPath("$.totals[0].debt").value(73566.76))
-                .andExpect(jsonPath("$.totals[0].progressPercentage").value(22.37))
+                .andExpect(jsonPath("$.totals[0].invested").value(21188.23))
+                .andExpect(jsonPath("$.totals[0].debt").value(73329.39))
+                .andExpect(jsonPath("$.totals[0].progressPercentage").value(22.42))
                 .andExpect(jsonPath("$.statements", hasSize(2)))
                 .andExpect(jsonPath("$.statements[0].transactionId").value(first.toString()))
                 .andExpect(jsonPath("$.statements[0].projectId").value(firstLot.getProjectId()))
@@ -291,18 +291,18 @@ class AccountStatementIntegrationTest {
                 .andExpect(jsonPath("$.statements[0].lotId").value(firstLot.getId()))
                 .andExpect(jsonPath("$.statements[0].lotCode").value("E-01"))
                 .andExpect(jsonPath("$.statements[0].lotPrice").value(45000.00))
-                .andExpect(jsonPath("$.statements[0].paidAmount").value(12198.56))
-                .andExpect(jsonPath("$.statements[0].balance").value(35184.10))
+                .andExpect(jsonPath("$.statements[0].paidAmount").value(3188.23))
+                .andExpect(jsonPath("$.statements[0].balance").value(35070.58))
                 .andExpect(jsonPath("$.statements[0].overdueInstallments").value(0))
                 .andExpect(jsonPath("$.statements[0].nextInstallment.number").value(2))
-                .andExpect(jsonPath("$.statements[0].nextInstallment.amountDue").value(3198.56))
+                .andExpect(jsonPath("$.statements[0].nextInstallment.amountDue").value(3188.23))
                 .andExpect(jsonPath("$.statements[0].nextInstallment.status").value("PENDING"))
                 .andExpect(jsonPath("$.statements[0].dueSoon").value(false))
                 .andExpect(jsonPath("$.statements[0].fullyPaid").value(false))
                 .andExpect(jsonPath("$.statements[1].transactionId").value(second.toString()))
                 .andExpect(jsonPath("$.statements[1].lotId").value(secondLot.getId()))
-                .andExpect(jsonPath("$.statements[1].paidAmount").value(9000.00))
-                .andExpect(jsonPath("$.statements[1].progressPercentage").value(18.99))
+                .andExpect(jsonPath("$.statements[1].paidAmount").value(0.00))
+                .andExpect(jsonPath("$.statements[1].progressPercentage").value(0.00))
                 .andExpect(jsonPath("$.statements[1].nextInstallment.number").value(1));
     }
 

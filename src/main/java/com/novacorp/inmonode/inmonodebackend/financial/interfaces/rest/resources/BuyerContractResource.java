@@ -14,5 +14,5 @@ import java.util.UUID;
  * @param acknowledgedAt    when the buyer gave their preliminary agreement (US-22); {@code null} until then
  */
 public record BuyerContractResource(UUID transactionId, String availability, Long contractId, Instant issuedAt,
-                                    String downloadUrl, Instant downloadExpiresAt, Instant acknowledgedAt) {
+                                    String downloadUrl, Instant downloadExpiresAt, Instant acknowledgedAt, CoOwnerResource coOwner) {
 }

@@ -37,9 +37,9 @@ public class ExternalLotAvailabilityService {
      * a rejection by concurrency is passed on, never retried.
      */
     public LotBlockOutcome blockLot(UUID transactionId, Long lotId, Long buyerId, Money initialAmount,
-                                    int termMonths, BigDecimal annualInterestRate, Instant requestedAt) {
+                                    int termMonths, BigDecimal annualInterestRate, Instant requestedAt, Money agreedPrice, Long quotationId) {
         var block = lotAvailabilityFacade.blockLot(transactionId, lotId, buyerId, initialAmount.amount(),
-                initialAmount.currency(), termMonths, annualInterestRate, requestedAt);
+                initialAmount.currency(), termMonths, annualInterestRate, requestedAt, agreedPrice.amount(), quotationId);
         var result = switch (block.result()) {
             case "BLOCKED" -> LotBlockOutcome.Result.BLOCKED;
             case "LOT_UNAVAILABLE" -> LotBlockOutcome.Result.UNAVAILABLE;

@@ -12,13 +12,15 @@ import java.util.UUID;
 public interface FieldReservationConsolidationFacade {
 
     /**
-     * Consolidates one reservation in its own transaction, so a conflict never undoes the others of the same sync.
+     * Consolidates a reservation, joining the sync transaction. Availability conflicts are returned as data.
      *
      * @param reservationId id the device generated for the reservation; a re-send carries the same one
      * @param prospectId    id the device generated for the prospect
      * @param initialAmount positive amount in soles
      * @throws IllegalArgumentException when the amount is not positive
      */
+    java.util.Set<Long> existingLotIds(java.util.Set<Long> ids);
+
     FieldReservationConsolidation consolidate(UUID reservationId, Long lotId, Long agentId, UUID prospectId,
                                               BigDecimal initialAmount, Instant reservedAt);
 }

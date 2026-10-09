@@ -75,6 +75,7 @@ public class ReservationQueryServiceImpl implements ReservationQueryService {
 
     /** Until when its lot waits for a voucher, when the reservation still holds it. */
     private @Nullable Instant waitingUntil(Reservation reservation) {
+        if (reservation.getStatus() == ReservationStatus.REJECTED) return reservation.getResubmissionDeadline();
         if (reservation.getStatus() != ReservationStatus.BLOCKED) {
             return null;
         }

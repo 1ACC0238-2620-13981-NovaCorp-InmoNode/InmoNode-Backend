@@ -2,6 +2,7 @@ package com.novacorp.inmonode.inmonodebackend.financial.domain.repositories;
 
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.aggregates.Lot;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.LotStatistics;
+import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.LotFilters;
 
 import java.time.Instant;
 import java.util.Collection;
@@ -14,6 +15,7 @@ import java.util.Set;
  * Persistence abstraction for the {@link Lot} aggregate.
  */
 public interface LotRepository {
+    Set<Long> existingIds(Set<Long> ids);
 
     /**
      * @return the persisted lots, with their generated ids
@@ -44,6 +46,9 @@ public interface LotRepository {
 
     /** Lots of the project ordered by code. */
     List<Lot> findByProjectId(Long projectId);
+
+    /** Numeric and status filters run in the database; viewport intersection uses the stored polygon. */
+    List<Lot> findByProjectId(Long projectId, LotFilters filters);
 
     /** Lots of several projects in one query, ordered by project and code. */
     List<Lot> findByProjectIds(Collection<Long> projectIds);

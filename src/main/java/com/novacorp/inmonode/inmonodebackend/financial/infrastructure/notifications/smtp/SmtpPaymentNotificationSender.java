@@ -38,7 +38,12 @@ public class SmtpPaymentNotificationSender implements PaymentNotificationSender 
 
     @Override
     public boolean remindUpcoming(PaymentNotice notice) {
-        return send(notice, REMINDER_SUBJECT.formatted(notice.installmentNumber(), notice.termMonths(),
+        var message = formatReminder(notice);
+        return send(notice, message.subject(), message.text());
+    }
+
+    public static NoticeMessage formatReminder(PaymentNotice notice) {
+        return new NoticeMessage(notice.email(), REMINDER_SUBJECT.formatted(notice.installmentNumber(), notice.termMonths(),
                 DATE.format(notice.dueDate())), """
                 Hola,
 
@@ -53,7 +58,12 @@ public class SmtpPaymentNotificationSender implements PaymentNotificationSender 
 
     @Override
     public boolean notifyOverdue(PaymentNotice notice) {
-        return send(notice, OVERDUE_SUBJECT.formatted(notice.installmentNumber(), notice.termMonths()), """
+        var message = formatOverdue(notice);
+        return send(notice, message.subject(), message.text());
+    }
+
+    public static NoticeMessage formatOverdue(PaymentNotice notice) {
+        return new NoticeMessage(notice.email(), OVERDUE_SUBJECT.formatted(notice.installmentNumber(), notice.termMonths()), """
                 Hola,
 
                 La cuota %d de %d de tu lote %s en %s venció el %s sin registrarse su pago.
@@ -67,6 +77,8 @@ public class SmtpPaymentNotificationSender implements PaymentNotificationSender 
                 notice.projectName(), DATE.format(notice.dueDate()), money(notice.amount(), notice.currency()),
                 money(notice.penalty(), notice.currency()), money(notice.amountDue(), notice.currency())));
     }
+
+    public record NoticeMessage(String email, String subject, String text) {}
 
     private boolean send(PaymentNotice notice, String subject, String text) {
         var message = new SimpleMailMessage();

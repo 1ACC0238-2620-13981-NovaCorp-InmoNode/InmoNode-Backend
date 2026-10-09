@@ -17,10 +17,16 @@ import java.util.UUID;
 public class FieldReservationConsolidationFacadeImpl implements FieldReservationConsolidationFacade {
 
     private final ReservationCommandService reservationCommandService;
+    private final com.novacorp.inmonode.inmonodebackend.financial.domain.repositories.LotRepository lots;
 
-    public FieldReservationConsolidationFacadeImpl(ReservationCommandService reservationCommandService) {
+    public FieldReservationConsolidationFacadeImpl(ReservationCommandService reservationCommandService,
+            com.novacorp.inmonode.inmonodebackend.financial.domain.repositories.LotRepository lots) {
         this.reservationCommandService = reservationCommandService;
+        this.lots = lots;
     }
+
+    @Override
+    public java.util.Set<Long> existingLotIds(java.util.Set<Long> ids) { return lots.existingIds(ids); }
 
     @Override
     public FieldReservationConsolidation consolidate(UUID reservationId, Long lotId, Long agentId, UUID prospectId,

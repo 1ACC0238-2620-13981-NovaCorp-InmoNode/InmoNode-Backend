@@ -5,6 +5,7 @@ import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.Money;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.ReservationChannel;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.ReservationStatus;
+import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.CoOwner;
 import org.jspecify.annotations.Nullable;
 
 import java.time.Instant;
@@ -24,6 +25,8 @@ import java.util.UUID;
  */
 public class Reservation {
 
+    private @Nullable Instant resubmissionDeadline;
+    private @Nullable CoOwner coOwner;
     private final @Nullable Long id;
     private final Long lotId;
     private final ReservationChannel channel;
@@ -124,8 +127,21 @@ public class Reservation {
      *
      * @return {@code false} when the reservation no longer held the lot, so nothing changed
      */
+    public void addCoOwner(CoOwner coOwner) {
+        if (coOwner == null) throw new IllegalArgumentException("co-owner is required");
+        if (status == ReservationStatus.EXPIRED || status == ReservationStatus.CANCELLED_BY_CONFLICT) {
+            throw new IllegalArgumentException("an inactive reservation cannot designate a co-owner");
+        }
+        this.coOwner = coOwner;
+    }
+
+    public static Reservation withCoOwner(Reservation restored, @Nullable CoOwner coOwner) {
+        restored.coOwner = coOwner;
+        return restored;
+    }
+
     public boolean expire() {
-        if (status != ReservationStatus.BLOCKED) {
+        if (status != ReservationStatus.BLOCKED && status != ReservationStatus.REJECTED) {
             return false;
         }
         status = ReservationStatus.EXPIRED;
@@ -144,6 +160,16 @@ public class Reservation {
     public boolean attachEvidence(PaymentEvidence evidence) {
         if (findEvidence(evidence.getReference()).isPresent()) {
             throw new IllegalStateException("payment evidence %s was already received".formatted(evidence.getReference()));
+        }
+        if (status == ReservationStatus.REJECTED) {
+            if (resubmissionDeadline == null || !evidence.getSubmittedAt().isBefore(resubmissionDeadline)) {
+                evidences.add(evidence.markedLate());
+                return false;
+            }
+            evidences.add(evidence);
+            status = ReservationStatus.PENDING_VERIFICATION;
+            resubmissionDeadline = null;
+            return true;
         }
         if (status == ReservationStatus.BLOCKED) {
             evidences.add(evidence);
@@ -171,6 +197,7 @@ public class Reservation {
         replace(evidence, evidence.approved(reviewerId, note, now));
         status = ReservationStatus.VERIFIED;
         verifiedAt = now;
+        resubmissionDeadline = null;
     }
 
     /**
@@ -181,13 +208,19 @@ public class Reservation {
      * @throws IllegalStateException when the evidence is not a pending one of this reservation
      */
     public boolean rejectEvidence(UUID reference, Long reviewerId, String reason, Instant now) {
+        return rejectEvidence(reference, reviewerId, reason, now, java.time.Duration.ofHours(24));
+    }
+
+    public boolean rejectEvidence(UUID reference, Long reviewerId, String reason, Instant now, java.time.Duration window) {
+        if (window == null || window.isNegative() || window.isZero()) throw new IllegalArgumentException("replacement window must be positive");
         var evidence = pendingEvidence(reference);
         replace(evidence, evidence.rejected(reviewerId, reason, now));
         var otherOnTime = evidences.stream().anyMatch(other -> other.isPending() && !other.isLate());
         if (status != ReservationStatus.PENDING_VERIFICATION || otherOnTime) {
             return false;
         }
-        status = ReservationStatus.BLOCKED;
+        status = ReservationStatus.REJECTED;
+        resubmissionDeadline = now.plus(window);
         return true;
     }
 
@@ -213,6 +246,13 @@ public class Reservation {
     public boolean isCancelledByConflict() {
         return status == ReservationStatus.CANCELLED_BY_CONFLICT;
     }
+
+    public static Reservation withResubmissionDeadline(Reservation restored, @Nullable Instant deadline) {
+        restored.resubmissionDeadline = deadline;
+        return restored;
+    }
+    public @Nullable Instant getResubmissionDeadline() { return resubmissionDeadline; }
+    public @Nullable CoOwner getCoOwner() { return coOwner; }
 
     public @Nullable Long getId() { return id; }
     public Long getLotId() { return lotId; }

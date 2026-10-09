@@ -11,6 +11,8 @@ import com.novacorp.inmonode.inmonodebackend.shared.application.result.Result;
  * Command side of the account statements: the back office and the daily review.
  */
 public interface AccountStatementCommandService {
+    InstallmentReviewSummary handle(com.novacorp.inmonode.inmonodebackend.financial.domain.model.commands.NotifyUpcomingInstallmentsCommand command);
+    InstallmentReviewSummary handle(com.novacorp.inmonode.inmonodebackend.financial.domain.model.commands.MarkOverdueInstallmentsCommand command);
 
     /**
      * US-23: records the payment of an installment; with the last one the lot is {@code SOLD}. Fails with

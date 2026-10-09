@@ -1,6 +1,7 @@
 package com.novacorp.inmonode.inmonodebackend.financial.application.internal.commandservices;
 
 import com.novacorp.inmonode.inmonodebackend.financial.application.internal.outboundservices.acl.ExternalIamService;
+import com.novacorp.inmonode.inmonodebackend.financial.application.internal.outboundservices.acl.ExternalQuotationSnapshotService;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.aggregates.AccountStatement;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.aggregates.Contract;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.aggregates.Reservation;
@@ -11,6 +12,7 @@ import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.ContractUpload;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.repositories.AccountStatementRepository;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.repositories.ContractRepository;
+import com.novacorp.inmonode.inmonodebackend.financial.domain.repositories.LotRepository;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.repositories.ReservationRepository;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.services.ContractCommandService;
 import com.novacorp.inmonode.inmonodebackend.shared.application.result.ApplicationError;
@@ -38,18 +40,25 @@ public class ContractCommandServiceImpl implements ContractCommandService {
     private final ObjectStorage objectStorage;
     private final ExternalIamService externalIamService;
     private final Clock clock;
+    private final LotRepository lotRepository;
+    private final ExternalQuotationSnapshotService quotationSnapshots;
+    private final com.novacorp.inmonode.inmonodebackend.financial.application.internal.outboundservices.notifications.FinancialNotificationOutbox notifications;
 
     public ContractCommandServiceImpl(ReservationRepository reservationRepository,
                                       ContractRepository contractRepository,
                                       AccountStatementRepository accountStatementRepository,
                                       ObjectStorage objectStorage, ExternalIamService externalIamService,
-                                      Clock clock) {
+                                      Clock clock, LotRepository lotRepository, ExternalQuotationSnapshotService quotationSnapshots,
+            com.novacorp.inmonode.inmonodebackend.financial.application.internal.outboundservices.notifications.FinancialNotificationOutbox notifications) {
         this.reservationRepository = reservationRepository;
         this.contractRepository = contractRepository;
         this.accountStatementRepository = accountStatementRepository;
         this.objectStorage = objectStorage;
         this.externalIamService = externalIamService;
         this.clock = clock;
+        this.lotRepository = lotRepository;
+        this.quotationSnapshots = quotationSnapshots;
+        this.notifications = notifications;
     }
 
     @Override
@@ -71,6 +80,10 @@ public class ContractCommandServiceImpl implements ContractCommandService {
             return Result.failure(new ApplicationError("UNAUTHORIZED", "The issuer is not authenticated"));
         }
         var document = new ContractDocument(command.transactionId(), command.documentId(), command.sizeBytes());
+        var found = reservationRepository.findBySourceEventId(command.transactionId()).orElse(null);
+        if (found == null) return Result.failure(ApplicationError.notFound("reservation", command.transactionId().toString()));
+        lotRepository.findByIdForUpdate(found.getLotId()).orElseThrow();
+        reservationRepository.findByIdForUpdate(found.getId()).orElseThrow();
         return issuable(command.transactionId()).flatMap(reservation -> {
             if (!isUploaded(document)) {
                 return Result.failure(new ApplicationError("CONTRACT_FILE_NOT_UPLOADED",
@@ -80,7 +93,9 @@ public class ContractCommandServiceImpl implements ContractCommandService {
             }
             // PostgreSQL keeps microseconds: the dates answered now must equal the ones read back later.
             var now = clock.instant().truncatedTo(ChronoUnit.MICROS);
-            return Result.success(contractRepository.save(Contract.issue(reservation, document, issuerId, now)));
+            var saved = contractRepository.save(Contract.issue(reservation, document, issuerId, now));
+            openAccountStatement(saved, now);
+            return Result.success(saved);
         });
     }
 
@@ -97,18 +112,23 @@ public class ContractCommandServiceImpl implements ContractCommandService {
         if (contract == null) {
             return Result.failure(ApplicationError.notFound("contract", String.valueOf(command.contractId())));
         }
+        lotRepository.findByIdForUpdate(contract.getLotId()).orElseThrow();
+        contract = contractRepository.findByIdForUpdate(command.contractId()).orElseThrow();
         // PostgreSQL keeps microseconds: the date answered now must equal the one read back later.
         var now = clock.instant().truncatedTo(ChronoUnit.MICROS);
         if (!contract.registerBuyerAcknowledgment(buyerId, now)) {
             return Result.success(contract);
         }
         var saved = contractRepository.save(contract);
-        openAccountStatement(saved, now);
+        notifications.enqueue("contract-acknowledged:" + contract.getId(), "@legal", "Conformidad preliminar del contrato",
+                "Contrato: " + contract.getId() + "\nTransacción: " + contract.getTransactionId()
+                        + "\nComprador: " + buyerId + "\nConformidad registrada: " + saved.getBuyerAcknowledgedAt()
+                        + "\nLa conformidad preliminar no acredita una firma electrónica del proveedor.");
         return Result.success(saved);
     }
 
     /**
-     * US-23: the agreement opens the buyer's account statement, in the same transaction. Web reservations made before
+     * US-23: issuance opens the buyer's account statement, in the same transaction. Web reservations made before
      * the financing plan was kept have none to schedule, so they get no statement.
      */
     private void openAccountStatement(Contract contract, Instant now) {
@@ -119,7 +139,10 @@ public class ContractCommandServiceImpl implements ContractCommandService {
         reservationRepository.findById(contract.getReservationId())
                 .filter(reservation -> reservation.getFinancingPlan() != null)
                 .ifPresent(reservation ->
-                        accountStatementRepository.save(AccountStatement.open(contract, reservation, now)));
+                        accountStatementRepository.save(reservation.getFinancingPlan().quotationId() == null
+                                ? AccountStatement.open(contract, reservation, now)
+                                : AccountStatement.open(contract, reservation, now, quotationSnapshots.scheduleFor(reservation,
+                                        java.time.LocalDate.ofInstant(now, AccountStatement.SALES_ZONE)))));
     }
 
     /** The reservation, when it can get its contract now. */

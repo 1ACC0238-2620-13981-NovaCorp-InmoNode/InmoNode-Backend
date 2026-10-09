@@ -143,7 +143,7 @@ class VerificationIntegrationTest {
     }
 
     @Test
-    void rejectingWaitsForASubstituteForANewWindowOfTheChannel() throws Exception {
+    void rejectionKeepsTheLotPendingFor24HoursAndDeliveryGrace() throws Exception {
         var fieldLot = lot("R-01");
         var webLot = lot("R-02");
         var field = fieldReservation(fieldLot);
@@ -156,14 +156,14 @@ class VerificationIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.evidenceStatus").value("REJECTED"))
                 .andExpect(jsonPath("$.reviewerNote").value("Voucher ilegible"))
-                .andExpect(jsonPath("$.reservationStatus").value("BLOCKED"))
-                .andExpect(jsonPath("$.lotStatus").value("BLOCKED"));
+                .andExpect(jsonPath("$.reservationStatus").value("REJECTED"))
+                .andExpect(jsonPath("$.lotStatus").value("PENDING_VERIFICATION"));
         reject(webEvidence, "Cuenta de destino incorrecta").andExpect(status().isOk());
 
-        assertHeldFor(fieldLot, before, Duration.ofHours(24));
-        assertHeldFor(webLot, before, Duration.ofHours(1));
+        assertHeldFor(fieldLot, before, Duration.ofHours(24).plusMinutes(15));
+        assertHeldFor(webLot, before, Duration.ofHours(24).plusMinutes(15));
         reservationCommandService.handle(new ReleaseExpiredLotBlocksCommand());
-        assertEquals(LotStatus.BLOCKED, reload(fieldLot).getStatus(), "the new window has not run out");
+        assertEquals(LotStatus.PENDING_VERIFICATION, reload(fieldLot).getStatus(), "the new window has not run out");
 
         var substitute = sendVoucher(field, "1500");
         assertEquals(ReservationStatus.PENDING_VERIFICATION,
@@ -262,7 +262,7 @@ class VerificationIntegrationTest {
 
     private void assertHeldFor(Lot lot, Instant before, Duration window) {
         var held = reload(lot);
-        assertEquals(LotStatus.BLOCKED, held.getStatus());
+        assertEquals(LotStatus.PENDING_VERIFICATION, held.getStatus());
         var until = held.getBlockedUntil();
         assertNotNull(until);
         assertFalse(until.isBefore(before.plus(window)));

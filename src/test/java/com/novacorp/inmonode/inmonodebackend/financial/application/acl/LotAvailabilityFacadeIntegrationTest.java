@@ -88,7 +88,7 @@ class LotAvailabilityFacadeIntegrationTest {
         assertEquals("PEN", offer.currency());
         assertTrue(offer.available());
         assertEquals(new BigDecimal("20.00"), offer.minDownPaymentPercentage());
-        assertEquals(new BigDecimal("12.500"), offer.annualInterestRate());
+        assertEquals(new BigDecimal("12.5000"), offer.annualInterestRate());
         assertEquals(120, offer.maxTermMonths());
     }
 
@@ -123,7 +123,7 @@ class LotAvailabilityFacadeIntegrationTest {
         assertNotNull(plan, "the quotation terms become the reservation financing plan");
         assertEquals(new Money(new BigDecimal("45000"), "PEN"), plan.lotPrice());
         assertEquals(12, plan.termMonths());
-        assertEquals(new BigDecimal("12.000"), plan.annualInterestRate());
+        assertEquals(new BigDecimal("12.0000"), plan.annualInterestRate());
         var blocked = reload(lot);
         assertEquals(LotStatus.BLOCKED, blocked.getStatus());
         assertEquals(reservation.getId(), blocked.getCurrentReservationId());

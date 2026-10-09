@@ -17,7 +17,7 @@ import java.util.List;
 public final class AmortizationSchedule {
 
     private static final MathContext PRECISION = MathContext.DECIMAL128;
-    private static final BigDecimal MONTHS_TIMES_PERCENT = BigDecimal.valueOf(1200);
+
 
     private AmortizationSchedule() {}
 
@@ -33,15 +33,15 @@ public final class AmortizationSchedule {
     public static List<Installment> french(BigDecimal financed, BigDecimal annualRatePercentage, int termMonths,
                                            LocalDate startDate) {
         if (financed == null || financed.signum() <= 0 || annualRatePercentage == null || termMonths < 1
-                || startDate == null) {
+                || termMonths > 360 || startDate == null) {
             throw new IllegalArgumentException("a schedule needs a positive financed amount, a rate and a term");
         }
-        var monthlyRate = annualRatePercentage.divide(MONTHS_TIMES_PERCENT, PRECISION);
+        var monthlyRate = effectiveMonthlyRate(annualRatePercentage);
         var fixed = fixedInstallment(financed, monthlyRate, termMonths);
         var installments = new ArrayList<Installment>(termMonths);
-        var balance = financed.setScale(2, RoundingMode.HALF_UP);
+        var balance = financed.setScale(2, RoundingMode.HALF_EVEN);
         for (int number = 1; number <= termMonths; number++) {
-            var interest = balance.multiply(monthlyRate, PRECISION).setScale(2, RoundingMode.HALF_UP);
+            var interest = balance.multiply(monthlyRate, PRECISION).setScale(2, RoundingMode.HALF_EVEN);
             var principal = number == termMonths ? balance : fixed.subtract(interest);
             balance = balance.subtract(principal);
             installments.add(Installment.scheduled(number, startDate.plusMonths(number), principal, interest));
@@ -49,13 +49,33 @@ public final class AmortizationSchedule {
         return List.copyOf(installments);
     }
 
+    /** Converts TEA to an effective monthly rate with decimal Newton iteration: (1 + TEA/100)^(1/12) - 1. */
+    static BigDecimal effectiveMonthlyRate(BigDecimal annualRatePercentage) {
+        if (annualRatePercentage == null || annualRatePercentage.signum() < 0
+                || annualRatePercentage.compareTo(BigDecimal.valueOf(100)) > 0) {
+            throw new IllegalArgumentException("effective annual rate must be between 0 and 100");
+        }
+        var annualGrowth = BigDecimal.ONE.add(annualRatePercentage.movePointLeft(2), PRECISION);
+        var root = BigDecimal.ONE;
+        for (int iteration = 0; iteration < 80; iteration++) {
+            var next = root.multiply(BigDecimal.valueOf(11), PRECISION)
+                    .add(annualGrowth.divide(root.pow(11, PRECISION), PRECISION), PRECISION)
+                    .divide(BigDecimal.valueOf(12), PRECISION);
+            if (next.subtract(root).abs().compareTo(new BigDecimal("1E-30")) < 0) {
+                return next.subtract(BigDecimal.ONE, PRECISION);
+            }
+            root = next;
+        }
+        throw new IllegalStateException("effective monthly rate did not converge");
+    }
+
     private static BigDecimal fixedInstallment(BigDecimal financed, BigDecimal monthlyRate, int termMonths) {
         if (monthlyRate.signum() == 0) {
-            return financed.divide(BigDecimal.valueOf(termMonths), 2, RoundingMode.HALF_UP);
+            return financed.divide(BigDecimal.valueOf(termMonths), 2, RoundingMode.HALF_EVEN);
         }
         var growth = BigDecimal.ONE.add(monthlyRate).pow(termMonths, PRECISION);
         return financed.multiply(monthlyRate, PRECISION).multiply(growth, PRECISION)
                 .divide(growth.subtract(BigDecimal.ONE), PRECISION)
-                .setScale(2, RoundingMode.HALF_UP);
+                .setScale(2, RoundingMode.HALF_EVEN);
     }
 }

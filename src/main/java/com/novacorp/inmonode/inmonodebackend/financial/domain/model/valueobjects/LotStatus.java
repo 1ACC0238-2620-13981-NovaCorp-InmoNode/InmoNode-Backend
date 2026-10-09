@@ -5,6 +5,7 @@ package com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobject
  * reservations (block, payment verification) and the final sale.
  */
 public enum LotStatus {
+    DRAFT,
     AVAILABLE,
     BLOCKED,
     PENDING_VERIFICATION,

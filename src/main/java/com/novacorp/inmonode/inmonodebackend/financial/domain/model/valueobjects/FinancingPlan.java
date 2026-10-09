@@ -11,7 +11,11 @@ import java.math.RoundingMode;
  * @param termMonths         number of monthly installments
  * @param annualInterestRate annual rate as a percentage (12.5 means 12.5 %)
  */
-public record FinancingPlan(Money lotPrice, int termMonths, BigDecimal annualInterestRate) {
+public record FinancingPlan(Money lotPrice, int termMonths, BigDecimal annualInterestRate, Long quotationId) {
+    public FinancingPlan(Money lotPrice, int termMonths, BigDecimal annualInterestRate) {
+        this(lotPrice, termMonths, annualInterestRate, null);
+    }
+
 
     public FinancingPlan {
         if (lotPrice == null || annualInterestRate == null) {
@@ -24,6 +28,6 @@ public record FinancingPlan(Money lotPrice, int termMonths, BigDecimal annualInt
         if (annualInterestRate.signum() < 0 || annualInterestRate.compareTo(BigDecimal.valueOf(100)) > 0) {
             throw new IllegalArgumentException("annualInterestRate must be between 0 and 100");
         }
-        annualInterestRate = annualInterestRate.setScale(3, RoundingMode.HALF_UP);
+        annualInterestRate = annualInterestRate.setScale(4, RoundingMode.HALF_EVEN);
     }
 }

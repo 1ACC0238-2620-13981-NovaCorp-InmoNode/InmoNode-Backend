@@ -3,6 +3,11 @@ package com.novacorp.inmonode.inmonodebackend.iam.infrastructure.authorization.s
 import com.novacorp.inmonode.inmonodebackend.iam.application.internal.outboundservices.tokens.TokenService;
 import com.novacorp.inmonode.inmonodebackend.iam.infrastructure.authorization.sfs.pipeline.JwtAuthenticationFilter;
 import com.novacorp.inmonode.inmonodebackend.iam.infrastructure.authorization.sfs.pipeline.SecurityErrorHandlers;
+import com.novacorp.inmonode.inmonodebackend.shared.infrastructure.ratelimiting.ApiRateLimitFilter;
+import com.novacorp.inmonode.inmonodebackend.shared.infrastructure.ratelimiting.IpRateLimiter;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
+import com.novacorp.inmonode.inmonodebackend.shared.infrastructure.auditing.FinancialAuditFilter;
+import org.springframework.web.filter.CorsFilter;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -19,6 +24,7 @@ import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 import java.time.Duration;
+import java.time.Clock;
 import java.util.Arrays;
 import java.util.List;
 
@@ -35,22 +41,25 @@ public class WebSecurityConfiguration {
 
     private static final String[] PUBLIC_ENDPOINTS = {
             "/api/v1/auth/**",
+            "/api-docs",
             "/v3/api-docs/**",
             "/swagger-ui/**",
             "/swagger-ui.html"
     };
 
     /**
-     * Read-only endpoints open to visitors without a session: the published project catalog (US-15).
+     * Read-only endpoints open without a session: the published catalog (US-15) and load-balancer health (US-34).
      * Writes on the same paths stay protected by {@code @PreAuthorize}.
      */
     private static final String[] PUBLIC_READ_ENDPOINTS = {
+            "/health",
             "/api/v1/projects",
             "/api/v1/projects/**"
     };
 
     @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http, TokenService tokenService) throws Exception {
+    public SecurityFilterChain securityFilterChain(HttpSecurity http, TokenService tokenService,
+                                                    ApiRateLimitFilter apiRateLimitFilter, @Value("${audit.enabled:true}") boolean auditEnabled) throws Exception {
         return http
                 .csrf(AbstractHttpConfigurer::disable)
                 .cors(Customizer.withDefaults())
@@ -63,7 +72,28 @@ public class WebSecurityConfiguration {
                         .requestMatchers(HttpMethod.GET, PUBLIC_READ_ENDPOINTS).permitAll()
                         .anyRequest().authenticated())
                 .addFilterBefore(new JwtAuthenticationFilter(tokenService), UsernamePasswordAuthenticationFilter.class)
+                .addFilterAfter(apiRateLimitFilter, CorsFilter.class)
+                .addFilterAfter(new FinancialAuditFilter(auditEnabled), JwtAuthenticationFilter.class)
                 .build();
+    }
+
+    @Bean
+    public ApiRateLimitFilter apiRateLimitFilter(
+            @Value("${api.rate-limit.enabled:true}") boolean enabled,
+            @Value("${api.rate-limit.catalog-per-minute:150}") int catalogLimit,
+            @Value("${api.rate-limit.pdf-per-minute:10}") int pdfLimit,
+            @Value("${api.rate-limit.general-per-minute:60}") int apiLimit,
+            @Value("${api.rate-limit.max-tracked-ips:10000}") int maxTrackedIps) {
+        return new ApiRateLimitFilter(new IpRateLimiter(Clock.systemUTC(), catalogLimit, pdfLimit, apiLimit,
+                maxTrackedIps), enabled);
+    }
+
+    /** Register only in Spring Security, after CORS; avoid a second invocation as a container filter. */
+    @Bean
+    public FilterRegistrationBean<ApiRateLimitFilter> rateLimitFilterRegistration(ApiRateLimitFilter filter) {
+        var registration = new FilterRegistrationBean<>(filter);
+        registration.setEnabled(false);
+        return registration;
     }
 
     /**
@@ -79,6 +109,7 @@ public class WebSecurityConfiguration {
                 .toList());
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("Authorization", "Content-Type", "Accept-Language", "Idempotency-Key"));
+        configuration.setExposedHeaders(List.of("Total-Count", "Retry-After"));
         configuration.setMaxAge(Duration.ofHours(1));
         var source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/api/**", configuration);

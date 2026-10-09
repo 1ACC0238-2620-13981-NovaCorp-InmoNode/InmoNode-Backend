@@ -22,6 +22,7 @@ public class Lot {
 
     public static final int MAX_CODE_LENGTH = 30;
 
+    private String stageName = "Etapa 1";
     private final @Nullable Long id;
     private final Long projectId;
     private final String code;
@@ -53,6 +54,31 @@ public class Lot {
                 null, null);
     }
 
+    public static Lot registerDraft(Long projectId, String stageName, String code, LotDimensions dimensions,
+                                    Money price, LotBoundary boundary) {
+        if (projectId == null || stageName == null || stageName.isBlank() || dimensions == null || price == null || boundary == null) {
+            throw new IllegalArgumentException("a draft lot needs its project, stage, dimensions, price and polygon");
+        }
+        var lot = new Lot(null, projectId, normalizeCode(code), dimensions, price, boundary, LotStatus.DRAFT, null, null);
+        lot.stageName = stageName.strip();
+        return lot;
+    }
+
+    public boolean publish() {
+        if (projectId == null || dimensions == null || price == null || boundary == null) {
+            throw new IllegalArgumentException("project, dimensions, price and polygon are required before publishing");
+        }
+        if (status != LotStatus.DRAFT) return false;
+        status = LotStatus.AVAILABLE;
+        return true;
+    }
+
+    public static Lot withStage(Lot lot, String stageName) {
+        lot.stageName = stageName;
+        return lot;
+    }
+    public String getStageName() { return stageName; }
+
     /** Rebuilds an already persisted lot. */
     public static Lot restore(Long id, Long projectId, String code, LotDimensions dimensions, Money price,
                               LotBoundary boundary, LotStatus status, @Nullable Long currentReservationId,
@@ -78,7 +104,7 @@ public class Lot {
     }
 
     public boolean hasExpiredBlock(Instant now) {
-        return status == LotStatus.BLOCKED && blockedUntil != null && !now.isBefore(blockedUntil);
+        return (status == LotStatus.BLOCKED || status == LotStatus.PENDING_VERIFICATION) && blockedUntil != null && !now.isBefore(blockedUntil);
     }
 
     /**
@@ -104,7 +130,8 @@ public class Lot {
      *         it was
      */
     public boolean moveToPendingVerification(Long reservationId, Instant now) {
-        if (status != LotStatus.BLOCKED || hasExpiredBlock(now) || !reservationId.equals(currentReservationId)) {
+        if ((status != LotStatus.BLOCKED && status != LotStatus.PENDING_VERIFICATION)
+                || hasExpiredBlock(now) || !reservationId.equals(currentReservationId)) {
             return false;
         }
         status = LotStatus.PENDING_VERIFICATION;
@@ -123,6 +150,7 @@ public class Lot {
             return false;
         }
         status = LotStatus.RESERVED;
+        blockedUntil = null;
         return true;
     }
 
@@ -132,6 +160,12 @@ public class Lot {
      *
      * @return {@code false} when the lot is not waiting for that reservation's verification, so it stays as it was
      */
+    public boolean awaitReplacement(Long reservationId, Instant deadlineWithDeliveryGrace) {
+        if (!isWaitingForVerificationOf(reservationId)) return false;
+        blockedUntil = deadlineWithDeliveryGrace;
+        return true;
+    }
+
     public boolean reopenBlock(Long reservationId, Instant now, Duration validity) {
         if (!isWaitingForVerificationOf(reservationId)) {
             return false;
@@ -142,7 +176,7 @@ public class Lot {
     }
 
     /**
-     * The account statement of the reservation holding the lot was paid off: the lot is sold (US-23, Scenario 2). It
+     * The contract of the reservation holding the lot was signed and verified: the lot is sold (US-56). It
      * stays assigned to that reservation.
      *
      * @return {@code false} when the lot is not reserved for that reservation, so it stays as it was

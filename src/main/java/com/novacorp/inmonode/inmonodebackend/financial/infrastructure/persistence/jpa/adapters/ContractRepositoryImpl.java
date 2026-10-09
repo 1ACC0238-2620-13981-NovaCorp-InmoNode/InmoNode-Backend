@@ -13,9 +13,11 @@ import java.util.Optional;
 public class ContractRepositoryImpl implements ContractRepository {
 
     private final ContractJpaRepository jpaRepository;
+    private final jakarta.persistence.EntityManager entityManager;
 
-    public ContractRepositoryImpl(ContractJpaRepository jpaRepository) {
+    public ContractRepositoryImpl(ContractJpaRepository jpaRepository, jakarta.persistence.EntityManager entityManager) {
         this.jpaRepository = jpaRepository;
+        this.entityManager = entityManager;
     }
 
     @Override
@@ -30,6 +32,14 @@ public class ContractRepositoryImpl implements ContractRepository {
     @Override
     public Optional<Contract> findById(Long id) {
         return jpaRepository.findById(id).map(ContractEntityAssembler::toDomain);
+    }
+
+    @Override
+    public Optional<Contract> findByIdForUpdate(Long id) {
+        return jpaRepository.findById(id).map(entity -> {
+            entityManager.refresh(entity, jakarta.persistence.LockModeType.PESSIMISTIC_WRITE);
+            return ContractEntityAssembler.toDomain(entity);
+        });
     }
 
     @Override

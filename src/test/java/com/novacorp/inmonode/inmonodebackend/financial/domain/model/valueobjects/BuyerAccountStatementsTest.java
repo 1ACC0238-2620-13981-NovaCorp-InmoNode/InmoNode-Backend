@@ -19,7 +19,7 @@ class BuyerAccountStatementsTest {
     @Test
     void theTotalsAddUpEveryLotOfTheSameCurrency() {
         var first = statement(5L, "PEN");
-        first.registerInstallmentPayment(1, new BigDecimal("3198.56"), NOW);
+        first.registerInstallmentPayment(1, new BigDecimal("3188.23"), NOW);
         var view = new BuyerAccountStatements(List.of(entry(first), entry(statement(6L, "PEN"))));
 
         var totals = view.totals();
@@ -28,9 +28,9 @@ class BuyerAccountStatementsTest {
         var pen = totals.getFirst();
         assertEquals("PEN", pen.currency());
         assertEquals(2, pen.lots());
-        assertEquals(new BigDecimal("21198.56"), pen.invested());
-        assertEquals(new BigDecimal("73566.76"), pen.debt());
-        assertEquals(new BigDecimal("22.37"), pen.progressPercentage());
+        assertEquals(new BigDecimal("21188.23"), pen.invested());
+        assertEquals(new BigDecimal("73329.39"), pen.debt());
+        assertEquals(new BigDecimal("22.42"), pen.progressPercentage());
     }
 
     @Test
@@ -43,7 +43,7 @@ class BuyerAccountStatementsTest {
         totals.forEach(currencyTotals -> {
             assertEquals(1, currencyTotals.lots());
             assertEquals(new BigDecimal("9000.00"), currencyTotals.invested());
-            assertEquals(new BigDecimal("18.99"), currencyTotals.progressPercentage());
+            assertEquals(new BigDecimal("19.04"), currencyTotals.progressPercentage());
         });
     }
 

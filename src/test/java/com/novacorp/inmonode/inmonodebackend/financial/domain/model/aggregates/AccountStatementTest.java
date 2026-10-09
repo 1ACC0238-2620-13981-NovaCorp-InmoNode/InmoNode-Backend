@@ -42,11 +42,11 @@ class AccountStatementTest {
         assertEquals(new BigDecimal("9000.00"), statement.getInitialPayment());
         assertEquals(new BigDecimal("36000.00"), statement.financedAmount());
         assertEquals(12, statement.getTermMonths());
-        assertEquals(new BigDecimal("12.000"), statement.getAnnualInterestRate());
+        assertEquals(new BigDecimal("12.0000"), statement.getAnnualInterestRate());
         assertEquals(NOW, statement.getOpenedAt());
         assertEquals(12, statement.getInstallments().size());
-        assertEquals(new BigDecimal("3198.56"), statement.getInstallments().getFirst().getAmount());
-        assertEquals(new BigDecimal("3198.50"), statement.getInstallments().getLast().getAmount());
+        assertEquals(new BigDecimal("3188.23"), statement.getInstallments().getFirst().getAmount());
+        assertEquals(new BigDecimal("3188.28"), statement.getInstallments().getLast().getAmount());
     }
 
     @Test
@@ -59,13 +59,13 @@ class AccountStatementTest {
     }
 
     @Test
-    void aNewStatementOnlyHasTheDownPaymentPaid() {
+    void aNewStatementDoesNotIncludeTheAlreadyVerifiedInitialPayment() {
         var statement = AccountStatement.open(contract(5L), reservation(PLAN), NOW);
 
-        assertEquals(new BigDecimal("47382.66"), statement.totalAmount());
-        assertEquals(new BigDecimal("9000.00"), statement.paidAmount());
-        assertEquals(new BigDecimal("38382.66"), statement.balance());
-        assertEquals(new BigDecimal("18.99"), statement.progressPercentage());
+        assertEquals(new BigDecimal("38258.81"), statement.totalAmount());
+        assertEquals(new BigDecimal("0.00"), statement.paidAmount());
+        assertEquals(new BigDecimal("38258.81"), statement.balance());
+        assertEquals(new BigDecimal("0.00"), statement.progressPercentage());
         assertFalse(statement.isFullyPaid());
         assertEquals(1, statement.nextInstallment().orElseThrow().getNumber());
     }
@@ -79,10 +79,10 @@ class AccountStatementTest {
         installments.set(2, overdue(installments.get(2), new BigDecimal("63.97")));
         var statement = restore(opened, installments);
 
-        assertEquals(new BigDecimal("15397.12"), statement.paidAmount());
-        assertEquals(new BigDecimal("32049.51"), statement.balance(), "the late fee is owed too");
-        assertEquals(new BigDecimal("47446.63"), statement.totalAmount());
-        assertEquals(new BigDecimal("32.45"), statement.progressPercentage());
+        assertEquals(new BigDecimal("6376.46"), statement.paidAmount());
+        assertEquals(new BigDecimal("31946.32"), statement.balance(), "the late fee is owed too");
+        assertEquals(new BigDecimal("38258.81"), statement.totalAmount());
+        assertEquals(new BigDecimal("16.67"), statement.progressPercentage());
         assertEquals(3, statement.nextInstallment().orElseThrow().getNumber(), "an overdue one is still to pay");
     }
 
@@ -93,7 +93,7 @@ class AccountStatementTest {
 
         assertTrue(statement.isFullyPaid());
         assertEquals(new BigDecimal("0.00"), statement.balance());
-        assertEquals(new BigDecimal("47382.66"), statement.paidAmount());
+        assertEquals(new BigDecimal("38258.81"), statement.paidAmount());
         assertEquals(new BigDecimal("100.00"), statement.progressPercentage());
         assertTrue(statement.nextInstallment().isEmpty());
         assertFalse(statement.isDueSoon(LocalDate.parse("2027-12-01")));
@@ -104,14 +104,14 @@ class AccountStatementTest {
         var statement = AccountStatement.open(contract(5L), reservation(PLAN), NOW);
         var paidAt = NOW.plusSeconds(86_400 * 30);
 
-        statement.registerInstallmentPayment(3, new BigDecimal("3198.56"), paidAt);
+        statement.registerInstallmentPayment(3, new BigDecimal("3188.23"), paidAt);
 
         var third = statement.findInstallment(3).orElseThrow();
         assertEquals(InstallmentStatus.PAID, third.getStatus());
         assertEquals(paidAt, third.getPaidAt());
-        assertEquals(new BigDecimal("3198.56"), third.getPaidAmount());
-        assertEquals(new BigDecimal("12198.56"), statement.paidAmount());
-        assertEquals(new BigDecimal("35184.10"), statement.balance());
+        assertEquals(new BigDecimal("3188.23"), third.getPaidAmount());
+        assertEquals(new BigDecimal("3188.23"), statement.paidAmount());
+        assertEquals(new BigDecimal("35070.58"), statement.balance());
         assertEquals(1, statement.nextInstallment().orElseThrow().getNumber());
         assertFalse(statement.isFullyPaid());
     }
@@ -124,27 +124,27 @@ class AccountStatementTest {
         var statement = restore(opened, installments);
         var first = statement.findInstallment(1).orElseThrow();
 
-        assertFalse(first.isSettledBy(new BigDecimal("3198.56")));
+        assertFalse(first.isSettledBy(new BigDecimal("3188.23")));
         assertThrows(IllegalArgumentException.class,
-                () -> statement.registerInstallmentPayment(1, new BigDecimal("3198.56"), NOW));
-        assertTrue(first.isSettledBy(new BigDecimal("3230.55")));
-        statement.registerInstallmentPayment(1, new BigDecimal("3230.55"), NOW);
+                () -> statement.registerInstallmentPayment(1, new BigDecimal("3188.23"), NOW));
+        assertTrue(first.isSettledBy(new BigDecimal("3220.22")));
+        statement.registerInstallmentPayment(1, new BigDecimal("3220.22"), NOW);
 
         assertEquals(InstallmentStatus.PAID, first.getStatus());
-        assertEquals(new BigDecimal("12230.55"), statement.paidAmount());
+        assertEquals(new BigDecimal("3188.23"), statement.paidAmount());
     }
 
     @Test
     void aPaidOrUnknownInstallmentCannotBePaid() {
         var statement = AccountStatement.open(contract(5L), reservation(PLAN), NOW);
-        statement.registerInstallmentPayment(1, new BigDecimal("3198.56"), NOW);
+        statement.registerInstallmentPayment(1, new BigDecimal("3188.23"), NOW);
 
         assertThrows(IllegalStateException.class,
-                () -> statement.registerInstallmentPayment(1, new BigDecimal("3198.56"), NOW));
+                () -> statement.registerInstallmentPayment(1, new BigDecimal("3188.23"), NOW));
         assertThrows(IllegalArgumentException.class,
-                () -> statement.registerInstallmentPayment(13, new BigDecimal("3198.56"), NOW));
+                () -> statement.registerInstallmentPayment(13, new BigDecimal("3188.23"), NOW));
         assertThrows(IllegalArgumentException.class,
-                () -> statement.registerInstallmentPayment(2, new BigDecimal("3198.57"), NOW));
+                () -> statement.registerInstallmentPayment(2, new BigDecimal("3188.24"), NOW));
         assertTrue(statement.findInstallment(13).isEmpty());
     }
 
@@ -156,7 +156,7 @@ class AccountStatementTest {
 
         assertTrue(statement.isFullyPaid());
         assertEquals(new BigDecimal("0.00"), statement.balance());
-        assertEquals(new BigDecimal("47382.66"), statement.paidAmount());
+        assertEquals(new BigDecimal("38258.81"), statement.paidAmount());
         assertEquals(new BigDecimal("100.00"), statement.progressPercentage());
     }
 
@@ -172,18 +172,18 @@ class AccountStatementTest {
         assertEquals(List.of(1), overdue.stream().map(Installment::getNumber).toList());
         var first = statement.findInstallment(1).orElseThrow();
         assertEquals(InstallmentStatus.OVERDUE, first.getStatus());
-        assertEquals(new BigDecimal("47.98"), first.getPenalty());
-        assertEquals(new BigDecimal("3246.54"), first.amountDue());
-        assertEquals(new BigDecimal("38430.64"), statement.balance());
+        assertEquals(new BigDecimal("47.82"), first.getPenalty());
+        assertEquals(new BigDecimal("3236.05"), first.amountDue());
+        assertEquals(new BigDecimal("38306.63"), statement.balance());
         assertTrue(statement.markOverdueInstallments(LocalDate.parse("2026-11-20"), lateFeeRate).isEmpty(),
                 "the fee is charged once");
-        assertEquals(new BigDecimal("47.98"), first.getPenalty());
+        assertEquals(new BigDecimal("47.82"), first.getPenalty());
     }
 
     @Test
     void severalInstallmentsCanFallOverdueAtOnceButNotThePaidOnes() {
         var statement = AccountStatement.open(contract(5L), reservation(PLAN), NOW);
-        statement.registerInstallmentPayment(1, new BigDecimal("3198.56"), NOW);
+        statement.registerInstallmentPayment(1, new BigDecimal("3188.23"), NOW);
 
         var overdue = statement.markOverdueInstallments(LocalDate.parse("2027-01-10"), BigDecimal.ZERO);
 
@@ -208,7 +208,7 @@ class AccountStatementTest {
 
         assertEquals(NOW, statement.findInstallment(1).orElseThrow().getReminderSentAt());
         assertTrue(statement.installmentsToRemind(LocalDate.parse("2026-11-05")).isEmpty());
-        statement.registerInstallmentPayment(2, new BigDecimal("3198.56"), NOW);
+        statement.registerInstallmentPayment(2, new BigDecimal("3188.23"), NOW);
         assertTrue(statement.installmentsToRemind(LocalDate.parse("2026-12-05")).isEmpty(), "paid already");
     }
 

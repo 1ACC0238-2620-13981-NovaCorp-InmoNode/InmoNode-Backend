@@ -8,8 +8,8 @@ import java.util.UUID;
  *
  * @param evidenceStatus    APPROVED or REJECTED
  * @param reviewerNote      the note of the reviewer; the reason of a rejection
- * @param reservationStatus VERIFIED after an approval; BLOCKED when a rejection reopened the wait for a substitute
- * @param lotStatus         RESERVED after an approval; BLOCKED while a substitute is awaited
+ * @param reservationStatus VERIFIED after an approval; REJECTED when a rejection reopened the wait for a substitute
+ * @param lotStatus         RESERVED after an approval; PENDING_VERIFICATION while a substitute is awaited
  * @param blockedUntil      until when the lot waits for the substitute, when it does
  */
 public record VerificationDecisionResource(Long evidenceId, String evidenceStatus, String reviewerNote,

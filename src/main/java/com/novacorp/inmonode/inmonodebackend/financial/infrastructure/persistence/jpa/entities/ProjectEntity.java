@@ -17,6 +17,13 @@ import java.math.BigDecimal;
 @Entity
 @Table(name = "projects", schema = "financial_document_control")
 public class ProjectEntity extends AuditableAbstractPersistenceEntity {
+    @jakarta.persistence.ElementCollection(fetch = jakarta.persistence.FetchType.EAGER)
+    @jakarta.persistence.CollectionTable(name = "project_stages", schema = "financial_document_control",
+            joinColumns = @jakarta.persistence.JoinColumn(name = "project_id"))
+    @jakarta.persistence.OrderColumn(name = "stage_order")
+    @Column(name = "stage_name", nullable = false, length = 80)
+    private java.util.List<String> stages = new java.util.ArrayList<>();
+
 
     @Column(nullable = false, length = 150)
     private String name;
@@ -34,7 +41,7 @@ public class ProjectEntity extends AuditableAbstractPersistenceEntity {
     @Column(nullable = false, precision = 5, scale = 2)
     private BigDecimal minDownPaymentPercentage;
 
-    @Column(nullable = false, precision = 6, scale = 3)
+    @Column(nullable = false, precision = 7, scale = 4)
     private BigDecimal annualInterestRate;
 
     @Column(nullable = false)

@@ -14,17 +14,18 @@ public final class LotEntityAssembler {
     private LotEntityAssembler() {}
 
     public static Lot toDomain(LotEntity entity) {
-        return Lot.restore(entity.getId(), entity.getProjectId(), entity.getCode(),
+        return Lot.withStage(Lot.restore(entity.getId(), entity.getProjectId(), entity.getCode(),
                 new LotDimensions(entity.getArea(), entity.getFront(), entity.getDepth()),
                 new Money(entity.getPriceAmount(), entity.getPriceCurrency()),
                 LotBoundary.fromWkt(entity.getBoundaryWkt()), entity.getStatus(),
-                entity.getCurrentReservationId(), entity.getBlockedUntil());
+                entity.getCurrentReservationId(), entity.getBlockedUntil()), entity.getStageName());
     }
 
     /** Copies the aggregate state onto the entity; audit columns and id stay untouched. */
     public static LotEntity copyToEntity(Lot lot, LotEntity entity) {
         entity.setProjectId(lot.getProjectId());
         entity.setCode(lot.getCode());
+        entity.setStageName(lot.getStageName());
         entity.setArea(lot.getDimensions().area());
         entity.setFront(lot.getDimensions().front());
         entity.setDepth(lot.getDimensions().depth());

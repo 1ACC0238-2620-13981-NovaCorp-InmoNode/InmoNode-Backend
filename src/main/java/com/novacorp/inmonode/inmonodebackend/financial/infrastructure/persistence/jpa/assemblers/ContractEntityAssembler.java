@@ -1,6 +1,7 @@
 package com.novacorp.inmonode.inmonodebackend.financial.infrastructure.persistence.jpa.assemblers;
 
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.aggregates.Contract;
+import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.CoOwner;
 import com.novacorp.inmonode.inmonodebackend.financial.infrastructure.persistence.jpa.entities.ContractEntity;
 
 /**
@@ -14,7 +15,8 @@ public final class ContractEntityAssembler {
         return Contract.restore(entity.getId(), entity.getReservationId(), entity.getTransactionId(),
                 entity.getBuyerId(), entity.getLotId(), entity.getDocumentId(), entity.getObjectKey(),
                 entity.getSizeBytes(), entity.getStatus(), entity.getIssuedAt(), entity.getIssuedBy(),
-                entity.getBuyerAcknowledgedAt());
+                entity.getBuyerAcknowledgedAt(), entity.getCoOwnerFullName() == null ? null :
+                        new CoOwner(entity.getCoOwnerFullName(), entity.getCoOwnerDocumentType(), entity.getCoOwnerDocumentNumber()));
     }
 
     /** Copies the aggregate state onto the entity; audit columns and id stay untouched. */
@@ -30,6 +32,10 @@ public final class ContractEntityAssembler {
         entity.setIssuedAt(contract.getIssuedAt());
         entity.setIssuedBy(contract.getIssuedBy());
         entity.setBuyerAcknowledgedAt(contract.getBuyerAcknowledgedAt());
+        var coOwner = contract.getCoOwner();
+        entity.setCoOwnerFullName(coOwner == null ? null : coOwner.fullName());
+        entity.setCoOwnerDocumentType(coOwner == null ? null : coOwner.documentType());
+        entity.setCoOwnerDocumentNumber(coOwner == null ? null : coOwner.documentNumber());
         return entity;
     }
 }

@@ -31,7 +31,19 @@ public class InstallmentReviewJob {
         this.clock = clock;
     }
 
-    @Scheduled(cron = "${financial.installments.review-cron:0 0 8 * * *}", zone = "America/Lima")
+    @Scheduled(cron = "${financial.installments.reminder-cron:0 0 8 * * *}", zone = "America/Lima")
+    public void notifyUpcomingInstallments() {
+        var today = LocalDate.now(clock.withZone(AccountStatement.SALES_ZONE));
+        accountStatementCommandService.handle(new com.novacorp.inmonode.inmonodebackend.financial.domain.model.commands.NotifyUpcomingInstallmentsCommand(today));
+    }
+
+    @Scheduled(cron = "${financial.installments.overdue-cron:0 5 8 * * *}", zone = "America/Lima")
+    public void markOverdueInstallments() {
+        var today = LocalDate.now(clock.withZone(AccountStatement.SALES_ZONE));
+        accountStatementCommandService.handle(new com.novacorp.inmonode.inmonodebackend.financial.domain.model.commands.MarkOverdueInstallmentsCommand(today));
+    }
+
+    /** Retained for explicit administrative reviews; not scheduled. */
     public void reviewInstallments() {
         var today = LocalDate.now(clock.withZone(AccountStatement.SALES_ZONE));
         var summary = accountStatementCommandService.handle(new ReviewInstallmentsCommand(today));
