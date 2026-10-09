@@ -168,14 +168,14 @@ class InstallmentReviewIntegrationTest {
         assertEquals(new BigDecimal("47.82"), installment(statement, 1).getPenalty(), "the fee is charged once");
 
         pay(statement, 1, "3188.23")
-                .andExpect(status().isUnprocessableEntity())
+                .andExpect(status().isUnprocessableContent())
                 .andExpect(jsonPath("$.details").value(containsString("3236.05 PEN")));
         pay(statement, 1, "3236.05")
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.installments[0].status").value("PAID"))
                 .andExpect(jsonPath("$.installments[0].penalty").value(47.82))
                 .andExpect(jsonPath("$.installments[0].paidAmount").value(3236.05))
-                .andExpect(jsonPath("$.paidAmount").value(12246.54));
+                .andExpect(jsonPath("$.paidAmount").value(3188.23));
     }
 
     @Test

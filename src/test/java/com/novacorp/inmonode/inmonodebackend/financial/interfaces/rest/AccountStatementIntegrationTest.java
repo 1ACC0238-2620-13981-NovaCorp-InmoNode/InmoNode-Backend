@@ -203,7 +203,7 @@ class AccountStatementIntegrationTest {
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("INSTALLMENT_CONFLICT"));
         pay(statementId, 1, "{\"amount\": 3000}")
-                .andExpect(status().isUnprocessableEntity())
+                .andExpect(status().isUnprocessableContent())
                 .andExpect(jsonPath("$.code").value("BUSINESS_RULE_VIOLATION"))
                 .andExpect(jsonPath("$.details").value(containsString("3188.23 PEN")));
 

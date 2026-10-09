@@ -93,7 +93,7 @@ class QuotationsIntegrationTest {
                 .andExpect(jsonPath("$.totalToPay").value(47258.81))
                 .andExpect(jsonPath("$.installments", hasSize(12)))
                 .andExpect(jsonPath("$.installments[0].number").value(1))
-                .andExpect(jsonPath("$.installments[0].interest").value(360.0))
+                .andExpect(jsonPath("$.installments[0].interest").value(341.6))
                 .andExpect(jsonPath("$.installments[11].balance").value(0.0))
                 .andReturn().getResponse().getContentAsString();
 

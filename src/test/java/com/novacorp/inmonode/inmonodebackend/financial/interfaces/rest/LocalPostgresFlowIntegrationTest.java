@@ -160,7 +160,7 @@ class LocalPostgresFlowIntegrationTest {
                 .andExpect(status().isCreated()).andExpect(jsonPath("$.status").value("DRAFT"))
                 .andReturn().getResponse().getContentAsString();
         var lot = JsonPath.<Number>read(registered, "$.id").longValue();
-        call(put("/api/v1/catalog/lots/{id}/publish", lot), Role.CATALOG_ADMIN, null).andExpect(status().isUnprocessableEntity());
+        call(put("/api/v1/catalog/lots/{id}/publish", lot), Role.CATALOG_ADMIN, null).andExpect(status().isUnprocessableContent());
         call(put("/api/v1/catalog/projects/{id}/publish", project), Role.CATALOG_ADMIN, null).andExpect(status().isOk());
         mvc.perform(get("/api/v1/projects/{id}/lots", project)).andExpect(jsonPath("$.features.length()").value(0));
         call(put("/api/v1/catalog/lots/{id}/publish", lot), Role.CATALOG_ADMIN, null).andExpect(status().isOk());
