@@ -62,13 +62,21 @@ public class PdfBoxGenerator implements PdfGenerator {
         }
     }
 
+    /** Breaks a line at its last space that fits; only a word longer than a whole line is split inside. */
     private static List<String> wrap(String value) throws IOException {
         var result = new ArrayList<String>();
         var line = new StringBuilder();
         for (char ch : printable(value).toCharArray()) {
             if (FONT.getStringWidth(line.toString() + ch) / 1000 * 10 > 505) {
-                result.add(line.toString());
-                line.setLength(0);
+                var lastSpace = line.lastIndexOf(" ");
+                if (ch == ' ' || lastSpace <= 0) {
+                    result.add(line.toString());
+                    line.setLength(0);
+                    if (ch == ' ') continue;
+                } else {
+                    result.add(line.substring(0, lastSpace));
+                    line.delete(0, lastSpace + 1);
+                }
             }
             line.append(ch);
         }

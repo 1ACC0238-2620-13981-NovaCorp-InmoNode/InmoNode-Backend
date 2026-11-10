@@ -31,4 +31,26 @@ class PdfBoxGeneratorTest {
         var bytes = new PdfBoxGenerator().generateReadOnly("Cotización", List.of("Precio ".repeat(100) + "FIN"));
         try (var pdf = Loader.loadPDF(bytes)) { assertTrue(new PDFTextStripper().getText(pdf).contains("FIN")); }
     }
+
+    @Test void longTextWrapsBetweenWords() throws Exception {
+        var bytes = new PdfBoxGenerator().generateReadOnly("Constancia", List.of("constancia ".repeat(60) + "FIN"));
+        try (var pdf = Loader.loadPDF(bytes)) {
+            var body = new PDFTextStripper().getText(pdf).lines().filter(line -> line.contains("constancia")).toList();
+            assertTrue(body.size() > 1, "the text needs several lines");
+            for (var line : body) {
+                assertTrue(line.strip().matches("constancia( constancia)*( FIN)?"), "a word was split: " + line);
+            }
+        }
+    }
+
+    @Test void aWordLongerThanALineIsStillSplitWithoutLosingCharacters() throws Exception {
+        var bytes = new PdfBoxGenerator().generateReadOnly("Constancia", List.of("x".repeat(200) + "FIN"));
+        try (var pdf = Loader.loadPDF(bytes)) {
+            var body = new PDFTextStripper().getText(pdf).lines().map(String::strip)
+                    .filter(line -> !line.isEmpty() && !line.equals("Constancia") && !line.startsWith("InmoNode"))
+                    .toList();
+            assertTrue(body.size() > 1, "the word needs several lines");
+            assertEquals("x".repeat(200) + "FIN", String.join("", body));
+        }
+    }
 }

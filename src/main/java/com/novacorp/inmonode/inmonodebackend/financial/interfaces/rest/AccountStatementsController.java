@@ -2,8 +2,10 @@ package com.novacorp.inmonode.inmonodebackend.financial.interfaces.rest;
 
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.commands.RegisterInstallmentPaymentCommand;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.queries.GetBuyerAccountStatementsQuery;
+import com.novacorp.inmonode.inmonodebackend.financial.domain.model.queries.GetNoDebtCertificateQuery;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.services.AccountStatementCommandService;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.services.AccountStatementQueryService;
+import com.novacorp.inmonode.inmonodebackend.financial.domain.services.NoDebtCertificateQueryService;
 import com.novacorp.inmonode.inmonodebackend.financial.interfaces.rest.resources.RegisterInstallmentPaymentResource;
 import com.novacorp.inmonode.inmonodebackend.financial.interfaces.rest.transform.AccountStatementResourceAssembler;
 import com.novacorp.inmonode.inmonodebackend.financial.interfaces.rest.transform.BuyerAccountStatementsResourceAssembler;
@@ -11,7 +13,11 @@ import com.novacorp.inmonode.inmonodebackend.shared.interfaces.rest.transform.Re
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import org.springframework.http.CacheControl;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -28,11 +34,14 @@ public class AccountStatementsController {
 
     private final AccountStatementCommandService accountStatementCommandService;
     private final AccountStatementQueryService accountStatementQueryService;
+    private final NoDebtCertificateQueryService noDebtCertificateQueryService;
 
     public AccountStatementsController(AccountStatementCommandService accountStatementCommandService,
-                                       AccountStatementQueryService accountStatementQueryService) {
+                                       AccountStatementQueryService accountStatementQueryService,
+                                       NoDebtCertificateQueryService noDebtCertificateQueryService) {
         this.accountStatementCommandService = accountStatementCommandService;
         this.accountStatementQueryService = accountStatementQueryService;
+        this.noDebtCertificateQueryService = noDebtCertificateQueryService;
     }
 
     @GetMapping
@@ -48,6 +57,26 @@ public class AccountStatementsController {
         var result = accountStatementQueryService.handle(new GetBuyerAccountStatementsQuery());
         return ResponseEntityAssembler.toResponseEntityFromResult(
                 result, BuyerAccountStatementsResourceAssembler::toResourceFromStatements, HttpStatus.OK);
+    }
+
+    @GetMapping("/{accountStatementId}/no-debt-certificate")
+    @PreAuthorize("hasRole('BUYER')")
+    @Operation(summary = "Download the no-debt certificate of my paid-off lot (US-26)",
+            description = "A read-only PDF compiled on request once the account statement owes nothing, late fees "
+                    + "included, to start the notarial deed. It names the buyer, the co-owner if any, the project, "
+                    + "the lot, what was paid and the pay-off date, with a representative digital signature: every "
+                    + "download has the same number and verification code. While anything is owed, 422 "
+                    + "BUSINESS_RULE_VIOLATION names the exact balance. An unknown statement or another buyer's "
+                    + "answers 404 ACCOUNT_STATEMENT_NOT_FOUND. The id is the one in GET /api/v1/account-statements.")
+    public ResponseEntity<?> downloadNoDebtCertificate(@PathVariable Long accountStatementId) {
+        var response = ResponseEntityAssembler.toResponseEntityFromResult(
+                noDebtCertificateQueryService.handle(new GetNoDebtCertificateQuery(accountStatementId)),
+                bytes -> bytes, HttpStatus.OK);
+        if (!response.getStatusCode().is2xxSuccessful()) return response;
+        return ResponseEntity.ok().contentType(MediaType.APPLICATION_PDF).cacheControl(CacheControl.noStore())
+                .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment()
+                        .filename("no-debt-certificate-" + accountStatementId + ".pdf").build().toString())
+                .body(response.getBody());
     }
 
     @PostMapping("/{accountStatementId}/installments/{number}/payment")
