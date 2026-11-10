@@ -32,8 +32,8 @@ import java.util.List;
  * Stateless JWT security for the whole modular monolith. Business modules restrict endpoints by role
  * with {@code @PreAuthorize("hasRole('BUYER')")} and similar annotations.
  *
- * <p>CORS admits only the web portal origins (US-38), so browser preflights are answered before
- * authentication runs.</p>
+ * <p>CORS admits only the configured web client origins (US-38): the web portal and Flutter Web. Browser
+ * preflights are answered before authentication runs.</p>
  */
 @Configuration
 @EnableMethodSecurity
@@ -97,19 +97,22 @@ public class WebSecurityConfiguration {
     }
 
     /**
-     * US-38: preflights from the configured portal origins are allowed; any other origin is rejected.
+     * US-38: requests from the configured origins are allowed; any other origin is rejected. Each entry is an
+     * exact origin or an origin pattern: {@code http://localhost:[*]} admits any port, as Flutter Web picks a
+     * new one on every {@code flutter run -d chrome}. {@code Content-Disposition} is exposed so web clients can
+     * read the file name of a downloaded PDF.
      */
     @Bean
     public CorsConfigurationSource corsConfigurationSource(
             @Value("${authorization.cors.allowed-origins}") String[] allowedOrigins) {
         var configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(Arrays.stream(allowedOrigins)
+        configuration.setAllowedOriginPatterns(Arrays.stream(allowedOrigins)
                 .map(String::trim)
                 .filter(origin -> !origin.isEmpty())
                 .toList());
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("Authorization", "Content-Type", "Accept-Language", "Idempotency-Key"));
-        configuration.setExposedHeaders(List.of("Total-Count", "Retry-After"));
+        configuration.setExposedHeaders(List.of("Total-Count", "Retry-After", "Content-Disposition"));
         configuration.setMaxAge(Duration.ofHours(1));
         var source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/api/**", configuration);

@@ -29,6 +29,7 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.Map;
 
+import static org.hamcrest.Matchers.containsString;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
@@ -47,7 +48,8 @@ class WebSecurityConfigurationIntegrationTest {
 
     private static final String PROTECTED_PATH = "/api/v1/security-probe/me";
     private static final String CATALOG_ADMIN_PATH = "/api/v1/security-probe/catalog-admin";
-    private static final String ALLOWED_ORIGIN = "http://localhost:5173";
+    private static final String ALLOWED_ORIGIN = "https://portal.inmonode.test";
+    private static final String FLUTTER_WEB_DEV_ORIGIN = "http://localhost:54321";
     private static final User BUYER =
             User.restore(42L, "buyer@mail.com", "hash", Role.BUYER, UserStatus.ACTIVE, null, null, 0, null);
 
@@ -110,10 +112,35 @@ class WebSecurityConfigurationIntegrationTest {
     }
 
     @Test
+    void preflightFromFlutterWebOnAnyLocalhostPortIsAllowed() throws Exception {
+        preflight(FLUTTER_WEB_DEV_ORIGIN)
+                .andExpect(status().isOk())
+                .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN, FLUTTER_WEB_DEV_ORIGIN));
+    }
+
+    @Test
     void preflightFromUnknownOriginIsRejected() throws Exception {
         preflight("https://evil.example.com")
                 .andExpect(status().isForbidden())
                 .andExpect(header().doesNotExist(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN));
+    }
+
+    @Test
+    void preflightFromHostThatOnlyStartsLikeLocalhostIsRejected() throws Exception {
+        preflight("http://localhost.evil.example.com:5173")
+                .andExpect(status().isForbidden())
+                .andExpect(header().doesNotExist(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN));
+    }
+
+    @Test
+    void crossOriginResponseExposesTheFileNameOfDownloads() throws Exception {
+        mockMvc.perform(get(PROTECTED_PATH)
+                        .header(HttpHeaders.ORIGIN, FLUTTER_WEB_DEV_ORIGIN)
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenService.generateToken(BUYER)))
+                .andExpect(status().isOk())
+                .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN, FLUTTER_WEB_DEV_ORIGIN))
+                .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_EXPOSE_HEADERS,
+                        containsString(HttpHeaders.CONTENT_DISPOSITION)));
     }
 
     private ResultActions getWithBearer(String path, String token) throws Exception {
