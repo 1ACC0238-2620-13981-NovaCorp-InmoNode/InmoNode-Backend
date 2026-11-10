@@ -161,6 +161,42 @@ class AccountStatementTest {
     }
 
     @Test
+    void itIsPaidOffOnItsLatestPaymentWhateverTheOrder() {
+        var statement = AccountStatement.open(contract(5L), reservation(PLAN), NOW);
+        var latest = NOW.plusSeconds(86_400 * 40);
+        statement.registerInstallmentPayment(12, new BigDecimal("3188.28"), NOW.plusSeconds(86_400));
+        statement.registerInstallmentPayment(1, new BigDecimal("3188.23"), latest);
+        assertTrue(statement.paidOffAt().isEmpty());
+
+        for (var number = 2; number <= 11; number++) {
+            statement.registerInstallmentPayment(number, new BigDecimal("3188.23"), NOW.plusSeconds(86_400L * number));
+        }
+
+        assertEquals(latest, statement.paidOffAt().orElseThrow());
+        assertEquals(new BigDecimal("0.00"), statement.paidLateFees());
+    }
+
+    @Test
+    void aPendingLateFeeKeepsItFromBeingPaidOff() {
+        var statement = AccountStatement.open(contract(5L), reservation(PLAN), NOW);
+        statement.markOverdueInstallments(LocalDate.parse("2026-11-09"), new BigDecimal("1.5"));
+        for (var number = 2; number <= 12; number++) {
+            var installment = statement.findInstallment(number).orElseThrow();
+            statement.registerInstallmentPayment(number, installment.amountDue(), NOW);
+        }
+
+        assertEquals(new BigDecimal("3236.05"), statement.balance(), "the installment and its late fee");
+        assertTrue(statement.paidOffAt().isEmpty());
+        assertEquals(new BigDecimal("0.00"), statement.paidLateFees());
+
+        var paidOffAt = NOW.plusSeconds(86_400 * 32);
+        statement.registerInstallmentPayment(1, new BigDecimal("3236.05"), paidOffAt);
+
+        assertEquals(paidOffAt, statement.paidOffAt().orElseThrow());
+        assertEquals(new BigDecimal("47.82"), statement.paidLateFees());
+    }
+
+    @Test
     void anInstallmentFallsOverdueTheDayAfterItsDueDateWithASingleLateFee() {
         var statement = AccountStatement.open(contract(5L), reservation(PLAN), NOW);
         var lateFeeRate = new BigDecimal("1.5");

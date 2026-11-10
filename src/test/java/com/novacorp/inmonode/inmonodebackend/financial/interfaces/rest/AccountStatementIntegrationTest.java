@@ -27,6 +27,8 @@ import com.novacorp.inmonode.inmonodebackend.iam.application.internal.outboundse
 import com.novacorp.inmonode.inmonodebackend.iam.domain.model.aggregates.User;
 import com.novacorp.inmonode.inmonodebackend.iam.domain.model.valueobjects.Role;
 import com.novacorp.inmonode.inmonodebackend.iam.domain.model.valueobjects.UserStatus;
+import org.apache.pdfbox.Loader;
+import org.apache.pdfbox.text.PDFTextStripper;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -45,10 +47,12 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.regex.Pattern;
 
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.hasSize;
@@ -57,6 +61,8 @@ import static org.hamcrest.Matchers.nullValue;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -72,6 +78,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class AccountStatementIntegrationTest {
 
     private static final AtomicLong BUYERS = new AtomicLong(13_000);
+    private static final String NO_DEBT_CERTIFICATE = "/api/v1/account-statements/{id}/no-debt-certificate";
 
     private final HttpClient http = HttpClient.newHttpClient();
 
@@ -328,6 +335,72 @@ class AccountStatementIntegrationTest {
 
     /** Web reservations made before the plan was kept have nothing to schedule: the agreement still works. */
     @Test
+    void theNoDebtCertificateIsOnlyIssuedOnceNothingIsOwed() throws Exception {
+        var buyer = BUYERS.incrementAndGet();
+        var otherBuyer = BUYERS.incrementAndGet();
+        var lot = lot();
+        var transactionId = separate(buyer, lot, quote(buyer, lot));
+        approve(sendVoucher(transactionId));
+        mockMvc.perform(post("/api/v1/reservations/{id}/co-owner", transactionId)
+                        .header(HttpHeaders.AUTHORIZATION, bearer(Role.BUYER, buyer))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"fullName\": \"Ana Pérez Quispe\", \"documentType\": \"DNI\", "
+                                + "\"documentNumber\": \"45678912\"}"))
+                .andExpect(status().isOk());
+        acknowledge(buyer, issue(buyer, transactionId)).andExpect(status().isOk());
+        var statementId = statementIdOf(buyer, transactionId);
+        var earlier = Instant.now().minus(2, ChronoUnit.DAYS).truncatedTo(ChronoUnit.SECONDS);
+        for (var number = 1; number <= 11; number++) {
+            pay(statementId, number, "{\"amount\": 3188.23, \"paidAt\": \"%s\"}".formatted(earlier))
+                    .andExpect(status().isOk());
+        }
+
+        noDebtCertificate(buyer, statementId)
+                .andExpect(status().isUnprocessableContent())
+                .andExpect(jsonPath("$.code").value("BUSINESS_RULE_VIOLATION"))
+                .andExpect(jsonPath("$.details").value(containsString("exactly 3188.28 PEN")));
+        noDebtCertificate(otherBuyer, statementId)
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("ACCOUNT_STATEMENT_NOT_FOUND"));
+        noDebtCertificate(buyer, 999_999_999L)
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("ACCOUNT_STATEMENT_NOT_FOUND"));
+        mockMvc.perform(get(NO_DEBT_CERTIFICATE, statementId)
+                        .header(HttpHeaders.AUTHORIZATION, bearer(Role.FINANCE_ADMIN, 77L)))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(get(NO_DEBT_CERTIFICATE, statementId)).andExpect(status().isUnauthorized());
+
+        var paidOffAt = Instant.now().minus(1, ChronoUnit.DAYS).truncatedTo(ChronoUnit.SECONDS);
+        pay(statementId, 12, "{\"amount\": 3188.28, \"paidAt\": \"%s\"}".formatted(paidOffAt))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.fullyPaid").value(true));
+
+        var text = textOf(noDebtCertificate(buyer, statementId)
+                .andExpect(status().isOk())
+                .andExpect(content().contentType(MediaType.APPLICATION_PDF))
+                .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "no-store"))
+                .andExpect(header().string(HttpHeaders.CONTENT_DISPOSITION,
+                        "attachment; filename=\"no-debt-certificate-%d.pdf\"".formatted(statementId))));
+        for (var expected : List.of("Certificado de No Adeudo",
+                "Certificado N.° NA-%06d".formatted(statementId),
+                "Comprador: usuario N.° " + buyer,
+                "Co-titular: Ana Pérez Quispe (DNI 45678912)",
+                "Proyecto: Estados de cuenta | Lote: E-01",
+                "Cuota inicial: 9000.00 PEN",
+                "Cuotas pagadas: 12 de 12, por 38258.81 PEN",
+                "Moras pagadas: 0.00 PEN",
+                "Total pagado: 47258.81 PEN",
+                "Saldo pendiente: 0.00 PEN",
+                "Fecha de cancelación: " + LocalDate.ofInstant(paidOffAt, AccountStatement.SALES_ZONE)
+                        .format(DateTimeFormatter.ofPattern("dd/MM/yyyy")),
+                "Firma digital representativa")) {
+            assertTrue(text.contains(expected), () -> "missing \"%s\" in:%n%s".formatted(expected, text));
+        }
+        var again = textOf(noDebtCertificate(buyer, statementId).andExpect(status().isOk()));
+        assertEquals(verificationCodeOf(text), verificationCodeOf(again), "the same certificate on every download");
+    }
+
+    @Test
     void aReservationWithoutPlanIsAgreedWithoutStatement() throws Exception {
         var buyer = BUYERS.incrementAndGet();
         var lot = lot();
@@ -363,6 +436,23 @@ class AccountStatementIntegrationTest {
     private long statementIdOf(long buyer, UUID transactionId) throws Exception {
         var answer = statementOf(buyer, transactionId).andReturn().getResponse().getContentAsString();
         return JsonPath.<Number>read(answer, "$.id").longValue();
+    }
+
+    private ResultActions noDebtCertificate(long buyer, long statementId) throws Exception {
+        return mockMvc.perform(get(NO_DEBT_CERTIFICATE, statementId)
+                .header(HttpHeaders.AUTHORIZATION, bearer(Role.BUYER, buyer)));
+    }
+
+    private static String textOf(ResultActions download) throws Exception {
+        try (var pdf = Loader.loadPDF(download.andReturn().getResponse().getContentAsByteArray())) {
+            return new PDFTextStripper().getText(pdf);
+        }
+    }
+
+    private static String verificationCodeOf(String text) {
+        var matcher = Pattern.compile("Código de verificación: ([0-9A-F]{4}(-[0-9A-F]{4}){3})").matcher(text);
+        assertTrue(matcher.find(), text);
+        return matcher.group(1);
     }
 
     private ResultActions pay(long statementId, int number, String body) throws Exception {

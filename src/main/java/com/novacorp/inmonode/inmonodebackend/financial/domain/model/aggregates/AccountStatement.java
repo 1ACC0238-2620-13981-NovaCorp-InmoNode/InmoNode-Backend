@@ -13,6 +13,7 @@ import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -146,6 +147,21 @@ public class AccountStatement {
 
     public boolean isFullyPaid() {
         return balance().signum() == 0;
+    }
+
+    /** US-26: the late fees paid with the installments. */
+    public BigDecimal paidLateFees() {
+        return installments.stream().filter(Installment::isPaid).map(Installment::getPenalty)
+                .reduce(BigDecimal.ZERO.setScale(2), BigDecimal::add);
+    }
+
+    /**
+     * US-26: when the statement was paid off, which is the latest payment since installments are paid in any order;
+     * empty while anything is owed.
+     */
+    public Optional<Instant> paidOffAt() {
+        if (!isFullyPaid()) return Optional.empty();
+        return installments.stream().map(Installment::getPaidAt).filter(Objects::nonNull).max(Comparator.naturalOrder());
     }
 
     public Optional<Installment> findInstallment(int number) {
