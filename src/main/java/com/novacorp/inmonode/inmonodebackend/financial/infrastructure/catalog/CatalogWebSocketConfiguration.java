@@ -22,13 +22,14 @@ public class CatalogWebSocketConfiguration implements WebSocketConfigurer {
             @Value("${authorization.cors.allowed-origins}") String[] allowedOrigins) {
         this.handler = handler;
         this.projects = projects;
-        this.allowedOrigins = java.util.Arrays.stream(allowedOrigins).map(String::trim).toArray(String[]::new);
+        this.allowedOrigins = java.util.Arrays.stream(allowedOrigins).map(String::trim)
+                .filter(origin -> !origin.isEmpty()).toArray(String[]::new);
     }
 
     @Override
     public void registerWebSocketHandlers(WebSocketHandlerRegistry registry) {
         registry.addHandler(handler, "/api/v1/projects/{projectId}/events")
-                .setAllowedOrigins(allowedOrigins).addInterceptors(new HandshakeInterceptor() {
+                .setAllowedOriginPatterns(allowedOrigins).addInterceptors(new HandshakeInterceptor() {
                     @Override
                     public boolean beforeHandshake(ServerHttpRequest request, ServerHttpResponse response,
                             WebSocketHandler wsHandler, Map<String, Object> attributes) {
