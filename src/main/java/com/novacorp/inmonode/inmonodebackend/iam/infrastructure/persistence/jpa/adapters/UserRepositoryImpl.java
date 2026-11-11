@@ -48,6 +48,11 @@ public class UserRepositoryImpl implements UserRepository {
     }
 
     @Override
+    public Optional<User> findByPasswordResetTokenHash(String tokenHash) {
+        return jpaRepository.findByPasswordResetTokenHash(tokenHash).map(UserEntityAssembler::toDomain);
+    }
+
+    @Override
     public boolean existsByEmail(String email) {
         return jpaRepository.existsByEmail(email);
     }

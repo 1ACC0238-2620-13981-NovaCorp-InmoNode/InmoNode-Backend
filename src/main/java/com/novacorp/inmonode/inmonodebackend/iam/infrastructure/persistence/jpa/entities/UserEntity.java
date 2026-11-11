@@ -42,4 +42,9 @@ public class UserEntity extends AuditableAbstractPersistenceEntity {
     private int failedAttempts;
 
     private Instant lockedUntil;
+
+    @Column(length = 64)
+    private String passwordResetTokenHash;
+
+    private Instant passwordResetRequestedAt;
 }
