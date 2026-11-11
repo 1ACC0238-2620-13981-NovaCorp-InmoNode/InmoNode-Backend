@@ -1,6 +1,8 @@
 package com.novacorp.inmonode.inmonodebackend.iam.domain.model.aggregates;
 
 import com.novacorp.inmonode.inmonodebackend.iam.domain.model.events.AccountLockedEvent;
+import com.novacorp.inmonode.inmonodebackend.iam.domain.model.events.PasswordResetEvent;
+import com.novacorp.inmonode.inmonodebackend.iam.domain.model.events.PasswordResetRequestedEvent;
 import com.novacorp.inmonode.inmonodebackend.iam.domain.model.events.UserRegisteredEvent;
 import com.novacorp.inmonode.inmonodebackend.iam.domain.model.events.VerificationTokenRenewedEvent;
 import com.novacorp.inmonode.inmonodebackend.iam.domain.model.valueobjects.Role;
@@ -26,17 +28,20 @@ public class User extends AbstractDomainAggregateRoot<User> {
 
     private final @Nullable Long id;
     private final String email;
-    private final String passwordHash;
+    private String passwordHash;
     private final Role role;
     private UserStatus status;
     private @Nullable String verificationToken;
     private @Nullable Instant verificationSentAt;
     private int failedAttempts;
     private @Nullable Instant lockedUntil;
+    private @Nullable String passwordResetTokenHash;
+    private @Nullable Instant passwordResetRequestedAt;
 
     private User(@Nullable Long id, String email, String passwordHash, Role role, UserStatus status,
                  @Nullable String verificationToken, @Nullable Instant verificationSentAt,
-                 int failedAttempts, @Nullable Instant lockedUntil) {
+                 int failedAttempts, @Nullable Instant lockedUntil,
+                 @Nullable String passwordResetTokenHash, @Nullable Instant passwordResetRequestedAt) {
         this.id = id;
         this.email = email;
         this.passwordHash = passwordHash;
@@ -46,6 +51,8 @@ public class User extends AbstractDomainAggregateRoot<User> {
         this.verificationSentAt = verificationSentAt;
         this.failedAttempts = failedAttempts;
         this.lockedUntil = lockedUntil;
+        this.passwordResetTokenHash = passwordResetTokenHash;
+        this.passwordResetRequestedAt = passwordResetRequestedAt;
     }
 
     /**
@@ -54,7 +61,8 @@ public class User extends AbstractDomainAggregateRoot<User> {
      */
     public static User register(String email, String passwordHash, Role role, Instant now) {
         var token = newVerificationToken();
-        var user = new User(null, normalize(email), passwordHash, role, UserStatus.INACTIVE, token, now, 0, null);
+        var user = new User(null, normalize(email), passwordHash, role, UserStatus.INACTIVE, token, now, 0, null,
+                null, null);
         user.registerDomainEvent(new UserRegisteredEvent(user.email, token));
         return user;
     }
@@ -62,9 +70,18 @@ public class User extends AbstractDomainAggregateRoot<User> {
     /** Rebuilds an already persisted account without raising events. */
     public static User restore(Long id, String email, String passwordHash, Role role, UserStatus status,
                                @Nullable String verificationToken, @Nullable Instant verificationSentAt,
-                               int failedAttempts, @Nullable Instant lockedUntil) {
+                               int failedAttempts, @Nullable Instant lockedUntil,
+                               @Nullable String passwordResetTokenHash, @Nullable Instant passwordResetRequestedAt) {
         return new User(id, email, passwordHash, role, status, verificationToken, verificationSentAt,
-                failedAttempts, lockedUntil);
+                failedAttempts, lockedUntil, passwordResetTokenHash, passwordResetRequestedAt);
+    }
+
+    /** Rebuilds an already persisted account that was never emailed a password reset link. */
+    public static User restore(Long id, String email, String passwordHash, Role role, UserStatus status,
+                               @Nullable String verificationToken, @Nullable Instant verificationSentAt,
+                               int failedAttempts, @Nullable Instant lockedUntil) {
+        return restore(id, email, passwordHash, role, status, verificationToken, verificationSentAt,
+                failedAttempts, lockedUntil, null, null);
     }
 
     private static String newVerificationToken() {
@@ -134,6 +151,48 @@ public class User extends AbstractDomainAggregateRoot<User> {
         lockedUntil = null;
     }
 
+    /**
+     * US-52, Scenario 1: issues a single-use link to reset the password of an active account. Only the
+     * digest of the token is kept; the token itself travels in the event to the email. The previous link stops
+     * working. Ignored for accounts pending verification, which must verify their email first, and while the
+     * previous link was emailed less than {@code cooldown} ago, which keeps the endpoint from being used to
+     * flood a mailbox.
+     *
+     * @param token     the token to email, never stored
+     * @param tokenHash the digest of {@code token}, by which the link is later looked up
+     * @return {@code true} if a new link was issued and must be emailed
+     */
+    public boolean requestPasswordReset(String token, String tokenHash, Instant now, Duration cooldown) {
+        if (!isActive() || (passwordResetRequestedAt != null
+                && now.isBefore(passwordResetRequestedAt.plus(cooldown)))) {
+            return false;
+        }
+        passwordResetTokenHash = tokenHash;
+        passwordResetRequestedAt = now;
+        registerDomainEvent(new PasswordResetRequestedEvent(email, token));
+        return true;
+    }
+
+    /**
+     * US-52: replaces the password when the digest matches the last link and that link was emailed less than
+     * {@code timeToLive} ago; otherwise nothing changes (Scenario 2). The link is single-use. The email proved
+     * the account is theirs, so a lock from failed sign-ins is lifted too.
+     *
+     * @return {@code true} if the password was replaced
+     */
+    public boolean resetPassword(String tokenHash, String newPasswordHash, Instant now, Duration timeToLive) {
+        if (passwordResetTokenHash == null || !passwordResetTokenHash.equals(tokenHash)
+                || passwordResetRequestedAt == null || !now.isBefore(passwordResetRequestedAt.plus(timeToLive))) {
+            return false;
+        }
+        passwordHash = newPasswordHash;
+        passwordResetTokenHash = null;
+        failedAttempts = 0;
+        lockedUntil = null;
+        registerDomainEvent(new PasswordResetEvent(email));
+        return true;
+    }
+
     public @Nullable Long getId() { return id; }
     public String getEmail() { return email; }
     public String getPasswordHash() { return passwordHash; }
@@ -143,4 +202,6 @@ public class User extends AbstractDomainAggregateRoot<User> {
     public @Nullable Instant getVerificationSentAt() { return verificationSentAt; }
     public int getFailedAttempts() { return failedAttempts; }
     public @Nullable Instant getLockedUntil() { return lockedUntil; }
+    public @Nullable String getPasswordResetTokenHash() { return passwordResetTokenHash; }
+    public @Nullable Instant getPasswordResetRequestedAt() { return passwordResetRequestedAt; }
 }

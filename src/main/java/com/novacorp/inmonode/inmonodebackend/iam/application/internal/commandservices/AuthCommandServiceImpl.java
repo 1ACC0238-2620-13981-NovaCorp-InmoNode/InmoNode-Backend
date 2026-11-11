@@ -7,7 +7,9 @@ import com.novacorp.inmonode.inmonodebackend.iam.domain.model.aggregates.Refresh
 import com.novacorp.inmonode.inmonodebackend.iam.domain.model.aggregates.User;
 import com.novacorp.inmonode.inmonodebackend.iam.domain.model.commands.RefreshTokenCommand;
 import com.novacorp.inmonode.inmonodebackend.iam.domain.model.commands.RegisterUserCommand;
+import com.novacorp.inmonode.inmonodebackend.iam.domain.model.commands.RequestPasswordResetCommand;
 import com.novacorp.inmonode.inmonodebackend.iam.domain.model.commands.ResendVerificationEmailCommand;
+import com.novacorp.inmonode.inmonodebackend.iam.domain.model.commands.ResetPasswordCommand;
 import com.novacorp.inmonode.inmonodebackend.iam.domain.model.commands.SignInCommand;
 import com.novacorp.inmonode.inmonodebackend.iam.domain.model.commands.SignOutCommand;
 import com.novacorp.inmonode.inmonodebackend.iam.domain.model.commands.VerifyEmailCommand;
@@ -34,15 +36,20 @@ public class AuthCommandServiceImpl implements AuthCommandService {
             new ApplicationError("INVALID_CREDENTIALS", "Invalid email or password");
     static final ApplicationError INVALID_REFRESH_TOKEN = new ApplicationError("INVALID_REFRESH_TOKEN",
             "The refresh token is invalid, expired or revoked", "Sign in again");
+    static final ApplicationError INVALID_RESET_TOKEN = new ApplicationError("INVALID_RESET_TOKEN",
+            "The password reset link is invalid, expired or was already used", "Request a new link");
 
     private final UserRepository userRepository;
     private final RefreshTokenRepository refreshTokenRepository;
     private final HashingService hashingService;
     private final TokenService tokenService;
+    /** Also creates the password reset tokens: both are opaque, single-use and stored only as a digest. */
     private final RefreshTokenGenerator refreshTokenGenerator;
     private final Duration refreshTokenTimeToLive;
     private final Duration verificationResendCooldown;
     private final Duration verificationTokenTimeToLive;
+    private final Duration passwordResetCooldown;
+    private final Duration passwordResetTokenTimeToLive;
     private final Clock clock;
 
     public AuthCommandServiceImpl(UserRepository userRepository, RefreshTokenRepository refreshTokenRepository,
@@ -53,6 +60,10 @@ public class AuthCommandServiceImpl implements AuthCommandService {
                                   long verificationResendCooldownSeconds,
                                   @Value("${authorization.verification.token-expiration-hours:24}")
                                   long verificationTokenHours,
+                                  @Value("${authorization.password-reset.request-cooldown-seconds:60}")
+                                  long passwordResetCooldownSeconds,
+                                  @Value("${authorization.password-reset.token-expiration-minutes:30}")
+                                  long passwordResetTokenMinutes,
                                   Clock clock) {
         this.userRepository = userRepository;
         this.refreshTokenRepository = refreshTokenRepository;
@@ -62,6 +73,8 @@ public class AuthCommandServiceImpl implements AuthCommandService {
         this.refreshTokenTimeToLive = Duration.ofDays(refreshTokenDays);
         this.verificationResendCooldown = Duration.ofSeconds(verificationResendCooldownSeconds);
         this.verificationTokenTimeToLive = Duration.ofHours(verificationTokenHours);
+        this.passwordResetCooldown = Duration.ofSeconds(passwordResetCooldownSeconds);
+        this.passwordResetTokenTimeToLive = Duration.ofMinutes(passwordResetTokenMinutes);
         this.clock = clock;
     }
 
@@ -157,6 +170,35 @@ public class AuthCommandServiceImpl implements AuthCommandService {
                     token.revoke(clock.instant());
                     refreshTokenRepository.save(token);
                 });
+    }
+
+    @Override
+    @Transactional
+    public void handle(RequestPasswordResetCommand command) {
+        var now = clock.instant();
+        userRepository.findByEmail(User.normalize(command.email())).ifPresent(user -> {
+            var token = refreshTokenGenerator.generate();
+            if (user.requestPasswordReset(token, refreshTokenGenerator.hash(token), now, passwordResetCooldown)) {
+                userRepository.save(user);
+            }
+        });
+    }
+
+    @Override
+    @Transactional
+    public Result<User, ApplicationError> handle(ResetPasswordCommand command) {
+        var now = clock.instant();
+        var tokenHash = refreshTokenGenerator.hash(command.token());
+        var user = userRepository.findByPasswordResetTokenHash(tokenHash).orElse(null);
+        if (user == null || !user.resetPassword(
+                tokenHash, hashingService.encode(command.newPassword()), now, passwordResetTokenTimeToLive)) {
+            return Result.failure(INVALID_RESET_TOKEN);
+        }
+        var saved = userRepository.save(user);
+        // Whoever knew the old password may hold a session: close them all.
+        refreshTokenRepository.revokeAllActiveByUserId(
+                Objects.requireNonNull(saved.getId(), "a reset link belongs to a persisted user"), now);
+        return Result.success(saved);
     }
 
     private AuthTokens issueTokens(User user, Instant now) {

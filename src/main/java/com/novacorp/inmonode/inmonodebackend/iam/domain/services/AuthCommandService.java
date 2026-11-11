@@ -3,7 +3,9 @@ package com.novacorp.inmonode.inmonodebackend.iam.domain.services;
 import com.novacorp.inmonode.inmonodebackend.iam.domain.model.aggregates.User;
 import com.novacorp.inmonode.inmonodebackend.iam.domain.model.commands.RefreshTokenCommand;
 import com.novacorp.inmonode.inmonodebackend.iam.domain.model.commands.RegisterUserCommand;
+import com.novacorp.inmonode.inmonodebackend.iam.domain.model.commands.RequestPasswordResetCommand;
 import com.novacorp.inmonode.inmonodebackend.iam.domain.model.commands.ResendVerificationEmailCommand;
+import com.novacorp.inmonode.inmonodebackend.iam.domain.model.commands.ResetPasswordCommand;
 import com.novacorp.inmonode.inmonodebackend.iam.domain.model.commands.SignInCommand;
 import com.novacorp.inmonode.inmonodebackend.iam.domain.model.commands.SignOutCommand;
 import com.novacorp.inmonode.inmonodebackend.iam.domain.model.commands.VerifyEmailCommand;
@@ -43,4 +45,18 @@ public interface AuthCommandService {
      * ignored, so the outcome reveals nothing about the token.
      */
     void handle(SignOutCommand command);
+
+    /**
+     * US-52, Scenario 1: emails an active account a single-use link to reset its password; the previous link
+     * stops working. Silent: an unknown email, an account pending verification or a request within the
+     * cooldown does nothing, so the outcome reveals nothing about the account.
+     */
+    void handle(RequestPasswordResetCommand command);
+
+    /**
+     * US-52: replaces the password of the account that owns the reset token, lifts a lock from failed sign-ins
+     * and revokes every refresh token of the account. An unknown, expired or used token is rejected
+     * (Scenario 2).
+     */
+    Result<User, ApplicationError> handle(ResetPasswordCommand command);
 }
