@@ -2,6 +2,7 @@ package com.novacorp.inmonode.inmonodebackend.iam.interfaces.rest;
 
 import com.novacorp.inmonode.inmonodebackend.TestcontainersConfiguration;
 import com.jayway.jsonpath.JsonPath;
+import com.novacorp.inmonode.inmonodebackend.iam.application.internal.outboundservices.notifications.PasswordResetEmailSender;
 import com.novacorp.inmonode.inmonodebackend.iam.application.internal.outboundservices.notifications.VerificationEmailSender;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -16,6 +17,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 
+import java.util.List;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
@@ -24,6 +26,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -39,12 +42,16 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class AuthControllerIntegrationTest {
 
     private static final String PASSWORD = "secret123";
+    private static final String NEW_PASSWORD = "new-secret456";
 
     @Autowired
     private MockMvc mockMvc;
 
     @MockitoBean
     private VerificationEmailSender verificationEmailSender;
+
+    @MockitoBean
+    private PasswordResetEmailSender passwordResetEmailSender;
 
     @Test
     void registerCreatesInactiveAccountAndRejectsDuplicate() throws Exception {
@@ -223,6 +230,98 @@ class AuthControllerIntegrationTest {
                 .andExpect(jsonPath("$.code").value("ACCOUNT_LOCKED"));
     }
 
+    @Test
+    void forgottenPasswordIsResetOnceThroughTheEmailedLinkAndEverySessionEnds() throws Exception {
+        var email = activeAccount();
+        var oldSession = refreshTokenOf(login(email, PASSWORD).andExpect(status().isOk()));
+
+        forgotPassword(email.toUpperCase()).andExpect(status().isNoContent());
+        var token = capturedResetToken(email);
+        resetPassword(token, NEW_PASSWORD).andExpect(status().isNoContent());
+
+        refresh(oldSession)
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("INVALID_REFRESH_TOKEN"));
+        login(email, PASSWORD)
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("INVALID_CREDENTIALS"));
+        login(email, NEW_PASSWORD).andExpect(status().isOk());
+        resetPassword(token, "another-secret789")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_RESET_TOKEN"));
+    }
+
+    @Test
+    void resettingThePasswordLiftsTheLockFromFailedAttempts() throws Exception {
+        var email = activeAccount();
+        for (int i = 0; i < 5; i++) {
+            login(email, "wrong-password");
+        }
+        login(email, PASSWORD).andExpect(status().isLocked());
+
+        forgotPassword(email).andExpect(status().isNoContent());
+        resetPassword(capturedResetToken(email), NEW_PASSWORD).andExpect(status().isNoContent());
+
+        login(email, NEW_PASSWORD).andExpect(status().isOk());
+    }
+
+    @Test
+    void forgotPasswordRevealsNothingAndSendsOnlyToActiveAccounts() throws Exception {
+        var pending = uniqueEmail();
+        register(pending).andExpect(status().isCreated());
+        var unknown = uniqueEmail();
+
+        forgotPassword(pending).andExpect(status().isNoContent());
+        forgotPassword(unknown).andExpect(status().isNoContent());
+        forgotPassword("not-an-email")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+
+        verify(passwordResetEmailSender, never()).send(anyString(), anyString());
+    }
+
+    @Test
+    void resetPasswordRejectsUnknownTokensAndInvalidPasswords() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/reset-password").contentType(MediaType.APPLICATION_JSON)
+                        .header(HttpHeaders.ACCEPT_LANGUAGE, "es")
+                        .content("""
+                                {"token": "not-a-reset-token", "newPassword": "%s"}""".formatted(NEW_PASSWORD)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_RESET_TOKEN"))
+                .andExpect(jsonPath("$.message").value(
+                        "El enlace para restablecer la contraseña no es válido, venció o ya se usó; pide uno nuevo"));
+        resetPassword("", NEW_PASSWORD)
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+
+        var email = activeAccount();
+        forgotPassword(email).andExpect(status().isNoContent());
+        var token = capturedResetToken(email);
+        resetPassword(token, "short")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+        resetPassword(token, NEW_PASSWORD).andExpect(status().isNoContent());
+    }
+
+    @Test
+    void openApiDocumentsTheNoContentAnswersInsteadOfAnInferred200() throws Exception {
+        var docs = mockMvc.perform(get("/v3/api-docs")).andExpect(status().isOk());
+
+        for (var endpoint : List.of("resend-verification", "logout", "forgot-password", "reset-password")) {
+            var responses = "$.paths['/api/v1/auth/%s'].post.responses".formatted(endpoint);
+            docs.andExpect(jsonPath(responses + "['204']").exists())
+                    .andExpect(jsonPath(responses + "['200']").doesNotExist());
+        }
+    }
+
+    /** Registers and verifies a new account with {@link #PASSWORD}, and returns its email. */
+    private String activeAccount() throws Exception {
+        var email = uniqueEmail();
+        register(email).andExpect(status().isCreated());
+        verifyEmail(capturedVerificationToken(email)).andExpect(status().isOk());
+        return email;
+    }
+
     private ResultActions register(String email) throws Exception {
         return postJson("/api/v1/auth/register", """
                 {"email": "%s", "password": "%s"}""".formatted(email, PASSWORD));
@@ -253,6 +352,16 @@ class AuthControllerIntegrationTest {
                 {"refreshToken": "%s"}""".formatted(refreshToken));
     }
 
+    private ResultActions forgotPassword(String email) throws Exception {
+        return postJson("/api/v1/auth/forgot-password", """
+                {"email": "%s"}""".formatted(email));
+    }
+
+    private ResultActions resetPassword(String token, String newPassword) throws Exception {
+        return postJson("/api/v1/auth/reset-password", """
+                {"token": "%s", "newPassword": "%s"}""".formatted(token, newPassword));
+    }
+
     private static String refreshTokenOf(ResultActions response) throws Exception {
         return JsonPath.read(response.andReturn().getResponse().getContentAsString(), "$.refreshToken");
     }
@@ -264,6 +373,12 @@ class AuthControllerIntegrationTest {
     private String capturedVerificationToken(String email) {
         var token = ArgumentCaptor.forClass(String.class);
         verify(verificationEmailSender).send(eq(email), token.capture());
+        return token.getValue();
+    }
+
+    private String capturedResetToken(String email) {
+        var token = ArgumentCaptor.forClass(String.class);
+        verify(passwordResetEmailSender).send(eq(email), token.capture());
         return token.getValue();
     }
 

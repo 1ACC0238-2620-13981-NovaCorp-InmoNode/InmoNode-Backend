@@ -7,10 +7,13 @@ import com.novacorp.inmonode.inmonodebackend.iam.domain.model.aggregates.Refresh
 import com.novacorp.inmonode.inmonodebackend.iam.domain.model.aggregates.User;
 import com.novacorp.inmonode.inmonodebackend.iam.domain.model.commands.RefreshTokenCommand;
 import com.novacorp.inmonode.inmonodebackend.iam.domain.model.commands.RegisterUserCommand;
+import com.novacorp.inmonode.inmonodebackend.iam.domain.model.commands.RequestPasswordResetCommand;
 import com.novacorp.inmonode.inmonodebackend.iam.domain.model.commands.ResendVerificationEmailCommand;
+import com.novacorp.inmonode.inmonodebackend.iam.domain.model.commands.ResetPasswordCommand;
 import com.novacorp.inmonode.inmonodebackend.iam.domain.model.commands.SignInCommand;
 import com.novacorp.inmonode.inmonodebackend.iam.domain.model.commands.SignOutCommand;
 import com.novacorp.inmonode.inmonodebackend.iam.domain.model.commands.VerifyEmailCommand;
+import com.novacorp.inmonode.inmonodebackend.iam.domain.model.events.PasswordResetRequestedEvent;
 import com.novacorp.inmonode.inmonodebackend.iam.domain.model.valueobjects.AuthTokens;
 import com.novacorp.inmonode.inmonodebackend.iam.domain.model.valueobjects.Role;
 import com.novacorp.inmonode.inmonodebackend.iam.domain.model.valueobjects.UserStatus;
@@ -41,6 +44,8 @@ class AuthCommandServiceImplTest {
     private static final long REFRESH_DAYS = 30;
     private static final long RESEND_COOLDOWN_SECONDS = 60;
     private static final long VERIFICATION_TOKEN_HOURS = 24;
+    private static final long RESET_COOLDOWN_SECONDS = 60;
+    private static final long RESET_TOKEN_MINUTES = 30;
 
     private final Map<String, User> users = new HashMap<>();
     private final Map<String, RefreshToken> refreshTokens = new HashMap<>();
@@ -60,6 +65,8 @@ class AuthCommandServiceImplTest {
                 .filter(u -> i.getArgument(0).equals(u.getId())).findFirst());
         when(repository.findByVerificationToken(any())).thenAnswer(i -> users.values().stream()
                 .filter(u -> i.getArgument(0).equals(u.getVerificationToken())).findFirst());
+        when(repository.findByPasswordResetTokenHash(any())).thenAnswer(i -> users.values().stream()
+                .filter(u -> i.getArgument(0).equals(u.getPasswordResetTokenHash())).findFirst());
         when(repository.save(any())).thenAnswer(i -> {
             User u = i.getArgument(0);
             users.put(u.getEmail(), u);
@@ -86,7 +93,8 @@ class AuthCommandServiceImplTest {
         when(generator.generate()).thenAnswer(i -> "rt-" + generatedTokens.incrementAndGet());
         when(generator.hash(any())).thenAnswer(i -> "sha:" + i.getArgument(0));
         service = new AuthCommandServiceImpl(repository, refreshTokenRepository, hashing, tokens, generator,
-                REFRESH_DAYS, RESEND_COOLDOWN_SECONDS, VERIFICATION_TOKEN_HOURS, Clock.fixed(NOW, ZoneOffset.UTC));
+                REFRESH_DAYS, RESEND_COOLDOWN_SECONDS, VERIFICATION_TOKEN_HOURS, RESET_COOLDOWN_SECONDS,
+                RESET_TOKEN_MINUTES, Clock.fixed(NOW, ZoneOffset.UTC));
     }
 
     @Test
@@ -270,6 +278,66 @@ class AuthCommandServiceImplTest {
         assertDoesNotThrow(() -> service.handle(new SignOutCommand("unknown")));
         verify(refreshTokenRepository, never()).revokeAllActiveByUserId(anyLong(), any());
         verify(refreshTokenRepository, times(2)).save(any());
+    }
+
+    @Test
+    void forgotPasswordStoresOnlyTheDigestOfTheEmailedToken() {
+        users.put("ana@mail.com", user(UserStatus.ACTIVE));
+
+        service.handle(new RequestPasswordResetCommand("  ANA@mail.com "));
+
+        var user = users.get("ana@mail.com");
+        assertEquals("sha:rt-1", user.getPasswordResetTokenHash());
+        assertEquals(NOW, user.getPasswordResetRequestedAt());
+        assertTrue(user.domainEvents().contains(new PasswordResetRequestedEvent("ana@mail.com", "rt-1")));
+        verify(repository).save(user);
+    }
+
+    @Test
+    void forgotPasswordDoesNothingForUnknownEmailsPendingAccountsOrWithinTheCooldown() {
+        users.put("ana@mail.com", pendingUser(1L, "ana@mail.com", NOW.minus(Duration.ofDays(1))));
+        users.put("bob@mail.com", User.restore(2L, "bob@mail.com", "hash", Role.BUYER, UserStatus.ACTIVE, null, null,
+                0, null, "sha:previous", NOW.minusSeconds(RESET_COOLDOWN_SECONDS - 1)));
+
+        service.handle(new RequestPasswordResetCommand("ana@mail.com"));
+        service.handle(new RequestPasswordResetCommand("bob@mail.com"));
+        service.handle(new RequestPasswordResetCommand("nobody@mail.com"));
+
+        assertNull(users.get("ana@mail.com").getPasswordResetTokenHash());
+        assertEquals("sha:previous", users.get("bob@mail.com").getPasswordResetTokenHash());
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void resetPasswordHashesTheNewPasswordClosesEverySessionAndWorksOnce() {
+        signedInUser();
+        // The generator also creates reset tokens: after the refresh token "rt-1", the link carries "rt-2".
+        service.handle(new RequestPasswordResetCommand("ana@mail.com"));
+
+        var user = success(service.handle(new ResetPasswordCommand("rt-2", "new-secret")));
+
+        assertEquals("hash:new-secret", user.getPasswordHash());
+        verify(refreshTokenRepository).revokeAllActiveByUserId(1L, NOW);
+        assertTrue(refreshTokens.get("sha:rt-1").isRevoked());
+        assertEquals("INVALID_CREDENTIALS",
+                failure(service.handle(new SignInCommand("ana@mail.com", "secret123"))).code());
+        success(service.handle(new SignInCommand("ana@mail.com", "new-secret")));
+        assertEquals("INVALID_RESET_TOKEN",
+                failure(service.handle(new ResetPasswordCommand("rt-2", "other-secret"))).code());
+    }
+
+    @Test
+    void resetPasswordRejectsUnknownAndExpiredTokens() {
+        users.put("ana@mail.com", User.restore(1L, "ana@mail.com", "hash:secret123", Role.BUYER, UserStatus.ACTIVE,
+                null, null, 0, null, "sha:expired", NOW.minus(Duration.ofMinutes(RESET_TOKEN_MINUTES))));
+
+        assertEquals("INVALID_RESET_TOKEN",
+                failure(service.handle(new ResetPasswordCommand("expired", "new-secret"))).code());
+        assertEquals("INVALID_RESET_TOKEN",
+                failure(service.handle(new ResetPasswordCommand("unknown", "new-secret"))).code());
+        assertEquals("hash:secret123", users.get("ana@mail.com").getPasswordHash());
+        verify(repository, never()).save(any());
+        verify(refreshTokenRepository, never()).revokeAllActiveByUserId(anyLong(), any());
     }
 
     /** An active user with id 1 who signed in and holds refresh token "rt-1". */

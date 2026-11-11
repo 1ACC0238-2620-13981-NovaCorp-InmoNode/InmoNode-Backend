@@ -22,5 +22,8 @@ public interface UserRepository {
 
     Optional<User> findByVerificationToken(String token);
 
+    /** Finds the account whose last password reset link carries the token with this digest. */
+    Optional<User> findByPasswordResetTokenHash(String tokenHash);
+
     boolean existsByEmail(String email);
 }
