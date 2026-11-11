@@ -17,6 +17,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 
+import java.util.List;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
@@ -25,6 +26,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -299,6 +301,17 @@ class AuthControllerIntegrationTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
         resetPassword(token, NEW_PASSWORD).andExpect(status().isNoContent());
+    }
+
+    @Test
+    void openApiDocumentsTheNoContentAnswersInsteadOfAnInferred200() throws Exception {
+        var docs = mockMvc.perform(get("/v3/api-docs")).andExpect(status().isOk());
+
+        for (var endpoint : List.of("resend-verification", "logout", "forgot-password", "reset-password")) {
+            var responses = "$.paths['/api/v1/auth/%s'].post.responses".formatted(endpoint);
+            docs.andExpect(jsonPath(responses + "['204']").exists())
+                    .andExpect(jsonPath(responses + "['200']").doesNotExist());
+        }
     }
 
     /** Registers and verifies a new account with {@link #PASSWORD}, and returns its email. */

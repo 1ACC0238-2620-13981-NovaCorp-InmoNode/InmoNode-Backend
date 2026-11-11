@@ -24,6 +24,7 @@ import com.novacorp.inmonode.inmonodebackend.shared.application.result.Result;
 import com.novacorp.inmonode.inmonodebackend.shared.interfaces.rest.transform.ErrorResponseAssembler;
 import com.novacorp.inmonode.inmonodebackend.shared.interfaces.rest.transform.ResponseEntityAssembler;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -65,6 +66,7 @@ public class AuthController {
             description = "Always 204, whether or not the email belongs to an account pending verification, "
                     + "so the response reveals nothing. The previous link stops working. Requests for the same "
                     + "email within the cooldown (60 s by default) send nothing.")
+    @ApiResponse(responseCode = "204", description = "Accepted; only an account pending verification gets an email")
     public ResponseEntity<Void> resendVerification(@Valid @RequestBody ResendVerificationResource resource) {
         authCommandService.handle(new ResendVerificationEmailCommand(resource.email()));
         return ResponseEntity.noContent().build();
@@ -84,6 +86,7 @@ public class AuthController {
     @Operation(summary = "Sign out by revoking the refresh token",
             description = "Always 204, even for an unknown or already revoked token. The access token stays "
                     + "valid until it expires, so the client must discard it too.")
+    @ApiResponse(responseCode = "204", description = "The refresh token is revoked, or was already unusable")
     public ResponseEntity<Void> logout(@Valid @RequestBody RefreshTokenResource resource) {
         authCommandService.handle(new SignOutCommand(resource.refreshToken()));
         return ResponseEntity.noContent().build();
@@ -103,6 +106,7 @@ public class AuthController {
                     + "reveals nothing. The link works once and for 30 minutes by default, and the previous link "
                     + "stops working. Requests for the same email within the cooldown (60 s by default) send "
                     + "nothing. Accounts pending verification get nothing: they must verify their email first.")
+    @ApiResponse(responseCode = "204", description = "Accepted; only an active account gets an email")
     public ResponseEntity<Void> forgotPassword(@Valid @RequestBody ForgotPasswordResource resource) {
         authCommandService.handle(new RequestPasswordResetCommand(resource.email()));
         return ResponseEntity.noContent().build();
@@ -114,6 +118,7 @@ public class AuthController {
                     + "INVALID_RESET_TOKEN, and a new link must be requested. The change lifts a lock from failed "
                     + "sign-ins and revokes every refresh token of the account; access tokens already issued stay "
                     + "valid until they expire.")
+    @ApiResponse(responseCode = "204", description = "The password was changed")
     public ResponseEntity<?> resetPassword(@Valid @RequestBody ResetPasswordResource resource) {
         var result = authCommandService.handle(new ResetPasswordCommand(resource.token(), resource.newPassword()));
         return switch (result) {
