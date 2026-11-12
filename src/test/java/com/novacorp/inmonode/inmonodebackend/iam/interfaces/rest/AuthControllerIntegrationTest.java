@@ -20,6 +20,7 @@ import org.springframework.test.web.servlet.ResultActions;
 import java.util.List;
 import java.util.UUID;
 
+import static org.hamcrest.Matchers.containsString;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -311,6 +312,40 @@ class AuthControllerIntegrationTest {
             var responses = "$.paths['/api/v1/auth/%s'].post.responses".formatted(endpoint);
             docs.andExpect(jsonPath(responses + "['204']").exists())
                     .andExpect(jsonPath(responses + "['200']").doesNotExist());
+        }
+        docs.andExpect(jsonPath("$.paths['/api/v1/auth/reset-password'].post.responses['204'].content").doesNotExist());
+    }
+
+    @Test
+    void openApiDocumentsTheAuthOperationsAsPublicWithTheirBodiesAndErrors() throws Exception {
+        var docs = mockMvc.perform(get("/v3/api-docs")).andExpect(status().isOk());
+
+        for (var endpoint : List.of("register", "verify-email", "resend-verification", "login", "refresh", "logout",
+                "forgot-password", "reset-password")) {
+            docs.andExpect(jsonPath("$.paths['/api/v1/auth/%s'].post.security".formatted(endpoint)).isEmpty());
+        }
+        expectBody(docs, "register", "201", "UserResource");
+        expectBody(docs, "verify-email", "200", "UserResource");
+        expectBody(docs, "login", "200", "TokenResource");
+        expectBody(docs, "refresh", "200", "TokenResource");
+        docs.andExpect(jsonPath("$.paths['/api/v1/auth/register'].post.responses['200']").doesNotExist());
+        expectErrors(docs, "register", "400", "409");
+        expectErrors(docs, "verify-email", "400");
+        expectErrors(docs, "login", "400", "401", "403", "423");
+        expectErrors(docs, "refresh", "401");
+        expectErrors(docs, "reset-password", "400");
+        docs.andExpect(jsonPath("$.paths['/api/v1/auth/forgot-password'].post.summary").value(containsString("US-14")))
+                .andExpect(jsonPath("$.paths['/api/v1/auth/reset-password'].post.summary").value(containsString("US-14")));
+    }
+
+    private static void expectBody(ResultActions docs, String endpoint, String status, String schema) throws Exception {
+        docs.andExpect(jsonPath("$.paths['/api/v1/auth/%s'].post.responses['%s'].content['application/json'].schema['$ref']"
+                .formatted(endpoint, status)).value("#/components/schemas/" + schema));
+    }
+
+    private static void expectErrors(ResultActions docs, String endpoint, String... statuses) throws Exception {
+        for (var status : statuses) {
+            expectBody(docs, endpoint, status, "ErrorResource");
         }
     }
 
