@@ -3,11 +3,16 @@ package com.novacorp.inmonode.inmonodebackend.quoting.interfaces.rest;
 import com.novacorp.inmonode.inmonodebackend.quoting.domain.model.queries.GetQuotationQuery;
 import com.novacorp.inmonode.inmonodebackend.quoting.domain.services.QuotationCommandService;
 import com.novacorp.inmonode.inmonodebackend.quoting.domain.services.QuotationQueryService;
+import com.novacorp.inmonode.inmonodebackend.quoting.interfaces.rest.resources.QuotationResource;
 import com.novacorp.inmonode.inmonodebackend.quoting.interfaces.rest.resources.SimulateFinancingResource;
 import com.novacorp.inmonode.inmonodebackend.quoting.interfaces.rest.transform.QuotationResourceAssembler;
 import com.novacorp.inmonode.inmonodebackend.quoting.interfaces.rest.transform.SimulateFinancingCommandFromResourceAssembler;
+import com.novacorp.inmonode.inmonodebackend.shared.interfaces.rest.resources.ErrorResource;
 import com.novacorp.inmonode.inmonodebackend.shared.interfaces.rest.transform.ResponseEntityAssembler;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -43,6 +48,19 @@ public class QuotationsController {
                     + "minimum share of the price (the minimum amount is in details), covers the whole price, or the "
                     + "term exceeds the project's maximum; 404 LOT_NOT_FOUND when the lot does not exist or its "
                     + "project is not published; 409 LOT_CONFLICT when the lot is not available.")
+    @ApiResponse(responseCode = "201", description = "Quotation created with its schedule of installments",
+            content = @Content(mediaType = "application/json", schema = @Schema(implementation = QuotationResource.class)))
+    @ApiResponse(responseCode = "400", description = "VALIDATION_ERROR: down payment under the minimum or covering the "
+            + "whole price, or term over the project's maximum; details names the rule broken",
+            content = @Content(mediaType = "application/json", schema = @Schema(implementation = ErrorResource.class)))
+    @ApiResponse(responseCode = "401", description = "UNAUTHORIZED: missing, invalid or expired token",
+            content = @Content(mediaType = "application/json", schema = @Schema(implementation = ErrorResource.class)))
+    @ApiResponse(responseCode = "403", description = "FORBIDDEN: the token's role is not BUYER",
+            content = @Content(mediaType = "application/json", schema = @Schema(implementation = ErrorResource.class)))
+    @ApiResponse(responseCode = "404", description = "LOT_NOT_FOUND: the lot does not exist or its project is not published",
+            content = @Content(mediaType = "application/json", schema = @Schema(implementation = ErrorResource.class)))
+    @ApiResponse(responseCode = "409", description = "LOT_CONFLICT: the lot is not available",
+            content = @Content(mediaType = "application/json", schema = @Schema(implementation = ErrorResource.class)))
     public ResponseEntity<?> simulate(@PathVariable Long lotId, @Valid @RequestBody SimulateFinancingResource resource) {
         var result = quotationCommandService.handle(
                 SimulateFinancingCommandFromResourceAssembler.toCommandFromResource(lotId, resource));
@@ -55,6 +73,14 @@ public class QuotationsController {
     @Operation(summary = "Get one of the buyer's quotations with its schedule",
             description = "Buyers only (BUYER). A quotation of another buyer answers 404 QUOTATION_NOT_FOUND, like a "
                     + "missing one.")
+    @ApiResponse(responseCode = "200", description = "The quotation with its schedule of installments",
+            content = @Content(mediaType = "application/json", schema = @Schema(implementation = QuotationResource.class)))
+    @ApiResponse(responseCode = "401", description = "UNAUTHORIZED: missing, invalid or expired token",
+            content = @Content(mediaType = "application/json", schema = @Schema(implementation = ErrorResource.class)))
+    @ApiResponse(responseCode = "403", description = "FORBIDDEN: the token's role is not BUYER",
+            content = @Content(mediaType = "application/json", schema = @Schema(implementation = ErrorResource.class)))
+    @ApiResponse(responseCode = "404", description = "QUOTATION_NOT_FOUND: missing, or it belongs to another buyer",
+            content = @Content(mediaType = "application/json", schema = @Schema(implementation = ErrorResource.class)))
     public ResponseEntity<?> getQuotation(@PathVariable Long quotationId) {
         var result = quotationQueryService.handle(new GetQuotationQuery(quotationId));
         return ResponseEntityAssembler.toResponseEntityFromResult(
