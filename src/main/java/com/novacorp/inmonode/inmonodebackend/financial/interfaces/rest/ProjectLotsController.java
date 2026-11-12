@@ -10,6 +10,7 @@ import com.novacorp.inmonode.inmonodebackend.financial.interfaces.rest.resources
 import com.novacorp.inmonode.inmonodebackend.financial.interfaces.rest.transform.ImportLotsCommandFromResourceAssembler;
 import com.novacorp.inmonode.inmonodebackend.financial.interfaces.rest.transform.LotFeatureCollectionResourceAssembler;
 import com.novacorp.inmonode.inmonodebackend.financial.interfaces.rest.transform.LotImportResultResourceAssembler;
+import com.novacorp.inmonode.inmonodebackend.shared.infrastructure.documentation.openapi.annotations.OptionalAuthentication;
 import com.novacorp.inmonode.inmonodebackend.shared.interfaces.rest.transform.ResponseEntityAssembler;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -44,9 +45,11 @@ public class ProjectLotsController {
     }
 
     @GetMapping
+    @OptionalAuthentication
     @Operation(summary = "Get and filter the lots of a project as GeoJSON (US-05, US-15, US-16)",
             description = "A FeatureCollection with one Polygon per lot and its code, measures, price and status. "
-                    + "Public for published projects; for a draft, only CATALOG_ADMIN (404 otherwise). "
+                    + "Public for published projects; the token is optional. For a draft, only CATALOG_ADMIN "
+                    + "(404 otherwise). "
                     + "Optional inclusive minArea/maxArea (m2), minPrice/maxPrice (PEN), status and WGS84 viewport "
                     + "west/south/east/north (all four required together). Invalid ranges return 400; no matches "
                     + "return an empty FeatureCollection. Omitting filters returns the complete map.")

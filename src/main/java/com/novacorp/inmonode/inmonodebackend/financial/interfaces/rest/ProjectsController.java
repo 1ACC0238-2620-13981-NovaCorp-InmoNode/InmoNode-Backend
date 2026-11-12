@@ -10,8 +10,10 @@ import com.novacorp.inmonode.inmonodebackend.financial.interfaces.rest.resources
 import com.novacorp.inmonode.inmonodebackend.financial.interfaces.rest.transform.CreateProjectCommandFromResourceAssembler;
 import com.novacorp.inmonode.inmonodebackend.financial.interfaces.rest.transform.ProjectResourceAssembler;
 import com.novacorp.inmonode.inmonodebackend.financial.interfaces.rest.transform.ProjectSummaryResourceAssembler;
+import com.novacorp.inmonode.inmonodebackend.shared.infrastructure.documentation.openapi.annotations.OptionalAuthentication;
 import com.novacorp.inmonode.inmonodebackend.shared.interfaces.rest.transform.ResponseEntityAssembler;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.security.SecurityRequirements;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -40,6 +42,7 @@ public class ProjectsController {
     }
 
     @GetMapping
+    @SecurityRequirements
     @Operation(summary = "List the published projects (US-15)",
             description = "Public, with or without a session. Each project carries its price range, its share of "
                     + "available lots and whether it is sold out.")
@@ -50,8 +53,10 @@ public class ProjectsController {
     }
 
     @GetMapping("/{projectId}")
+    @OptionalAuthentication
     @Operation(summary = "Get a project with its financing rules (US-15)",
-            description = "Public for published projects; a draft is visible only to CATALOG_ADMIN (404 otherwise).")
+            description = "Public for published projects; the token is optional. A draft is visible only to "
+                    + "CATALOG_ADMIN (404 otherwise).")
     public ResponseEntity<?> getById(@PathVariable Long projectId) {
         var result = projectQueryService.handle(new GetProjectByIdQuery(projectId));
         return ResponseEntityAssembler.toResponseEntityFromResult(
