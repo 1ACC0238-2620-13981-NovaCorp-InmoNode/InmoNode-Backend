@@ -196,6 +196,24 @@ class QuotationsIntegrationTest {
                 .andExpect(status().isUnauthorized());
     }
 
+    @Test
+    void openApiDocumentsTheCreatedQuotationAndEveryRejection() throws Exception {
+        var simulate = "$.paths['/api/v1/lots/{lotId}/quotations'].post";
+        var docs = mockMvc.perform(get("/v3/api-docs")).andExpect(status().isOk())
+                .andExpect(jsonPath(simulate + ".security").doesNotExist())
+                .andExpect(jsonPath("$.security[0].bearerAuth").isArray())
+                .andExpect(jsonPath(simulate + ".responses['200']").doesNotExist())
+                .andExpect(jsonPath(simulate + ".responses['201'].content['application/json'].schema['$ref']")
+                        .value("#/components/schemas/QuotationResource"));
+        for (var status : List.of("400", "401", "403", "404", "409")) {
+            docs.andExpect(jsonPath(simulate + ".responses['%s'].content['application/json'].schema['$ref']".formatted(status))
+                    .value("#/components/schemas/ErrorResource"));
+        }
+        docs.andExpect(jsonPath("$.paths['/api/v1/quotations/{quotationId}'].get.responses['200']"
+                        + ".content['application/json'].schema['$ref']").value("#/components/schemas/QuotationResource"))
+                .andExpect(jsonPath("$.components.schemas.QuotationResource.properties.installments.type").value("array"));
+    }
+
     private ResultActions simulate(long buyer, Long lotId, String initialPayment, int termMonths) throws Exception {
         return mockMvc.perform(post("/api/v1/lots/{lotId}/quotations", lotId)
                 .header(HttpHeaders.AUTHORIZATION, bearer(Role.BUYER, buyer))
