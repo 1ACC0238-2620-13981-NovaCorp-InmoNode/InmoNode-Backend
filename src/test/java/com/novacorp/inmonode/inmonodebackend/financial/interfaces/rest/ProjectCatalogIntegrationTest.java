@@ -141,6 +141,22 @@ class ProjectCatalogIntegrationTest {
     }
 
     @Test
+    void openApiDocumentsTheCatalogReadsAsPublicWithAnOptionalTokenWhereItRevealsDrafts() throws Exception {
+        var project = "$.paths['/api/v1/projects/{projectId}']";
+        var lots = "$.paths['/api/v1/projects/{projectId}/lots']";
+        var docs = mockMvc.perform(get("/v3/api-docs")).andExpect(status().isOk())
+                .andExpect(jsonPath("$.paths['/api/v1/projects'].get.security").isEmpty())
+                .andExpect(jsonPath("$.paths['/api/v1/projects'].post.security").doesNotExist())
+                .andExpect(jsonPath(lots + ".post.security").doesNotExist())
+                .andExpect(jsonPath("$.paths['/api/v1/catalog/projects/{projectId}/lots'].get.security").doesNotExist());
+        for (var read : List.of(project, lots)) {
+            docs.andExpect(jsonPath(read + ".get.security.length()").value(2))
+                    .andExpect(jsonPath(read + ".get.security[0]").isEmpty())
+                    .andExpect(jsonPath(read + ".get.security[1].bearerAuth").isArray());
+        }
+    }
+
+    @Test
     void inclusiveAreaPriceAndStatusFiltersAreAppliedToTheProjectLots() throws Exception {
         var projectId = publishedProjectWithPlanLots();
         mockMvc.perform(get("/api/v1/projects/{id}/lots", projectId)
