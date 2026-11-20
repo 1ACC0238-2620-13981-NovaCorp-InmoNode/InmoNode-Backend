@@ -47,8 +47,9 @@ public class LotRepositoryImpl implements LotRepository {
     }
 
     @Override
-    public Set<Long> existingIds(Set<Long> ids) {
-        return jpaRepository.findAllById(ids).stream().map(LotEntity::getId).collect(Collectors.toSet());
+    public Map<Long, Money> pricesOf(Set<Long> ids) {
+        return jpaRepository.findAllById(ids).stream().collect(Collectors.toMap(LotEntity::getId,
+                lot -> new Money(lot.getPriceAmount(), lot.getPriceCurrency())));
     }
 
     @Override

@@ -20,12 +20,16 @@ public class ExternalFinancialService {
         this.consolidationFacade = consolidationFacade;
     }
 
-    public java.util.Set<Long> existingLotIds(java.util.Set<Long> ids) { return consolidationFacade.existingLotIds(ids); }
+    /** Price of each existing lot among {@code ids}; a lot that does not exist is left out. */
+    public java.util.Map<Long, java.math.BigDecimal> lotPrices(java.util.Set<Long> ids) {
+        return consolidationFacade.lotPrices(ids);
+    }
 
     /** Consolidated in its own transaction: a conflict here never undoes the other reservations of the sync. */
     public ReservationSyncOutcome consolidate(Long agentId, ReservationData reservation) {
         var answer = consolidationFacade.consolidate(reservation.reservationId(), reservation.lotId(), agentId,
-                reservation.prospectId(), reservation.initialAmount(), reservation.reservedAt());
+                reservation.prospectId(), reservation.initialAmount(), reservation.reservedAt(),
+                reservation.discountAmount(), reservation.bonus(), reservation.negotiationNotes());
         return new ReservationSyncOutcome(reservation.reservationId(), Result.valueOf(answer.result()),
                 answer.reservationStatus(), answer.blockedUntil(), answer.conflictReason(),
                 resultOrNull(answer.originalResult()));
