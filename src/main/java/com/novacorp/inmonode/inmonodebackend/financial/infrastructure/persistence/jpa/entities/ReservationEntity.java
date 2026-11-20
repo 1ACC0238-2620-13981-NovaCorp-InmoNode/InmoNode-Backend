@@ -81,6 +81,16 @@ public class ReservationEntity extends AuditableAbstractPersistenceEntity {
     @Column(precision = 7, scale = 4)
     private BigDecimal annualInterestRate;
 
+    /** Negotiation terms of a field reservation (US-58); the discount is in the currency of the initial amount. */
+    @Column(precision = 14, scale = 2)
+    private BigDecimal discountAmount;
+
+    @Column(length = 150)
+    private String bonus;
+
+    @Column(length = 500)
+    private String negotiationNotes;
+
     /** A reservation receives few evidences and needs them all to be rebuilt, so they are loaded with it. */
     @OneToMany(mappedBy = "reservation", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
     @OrderBy("id")
