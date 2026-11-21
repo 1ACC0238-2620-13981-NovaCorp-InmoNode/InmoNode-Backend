@@ -38,8 +38,11 @@ public class FieldRecordsController {
             description = "Field agents only (FIELD_AGENT). Answers 201 with one result per reservation: SYNCED (the "
                     + "lot is held for 24 hours), CONFLICT (another operation reached the server first; revert the lot "
                     + "and alert the agent) or DUPLICATE (already processed; idempotent by the device id). Accepted "
-                    + "reservations are kept even when others conflict. A structurally invalid payload is rejected "
-                    + "as a whole with 400 and nothing is stored.")
+                    + "reservations are kept even when others conflict. Each reservation may carry the negotiation "
+                    + "terms agreed in the field (US-58): discountAmount (soles, below the lot price), bonus (up to "
+                    + "150 characters, does not change the price) and negotiationNotes (up to 500 characters); they "
+                    + "are kept with the reservation. A structurally invalid payload, a discount that reaches the lot "
+                    + "price included, is rejected as a whole with 400 and nothing is stored.")
     public ResponseEntity<?> sync(@Valid @RequestBody FieldSyncResource resource) {
         var result = fieldSyncCommandService.handle(
                 SyncFieldRecordsCommandFromResourceAssembler.toCommandFromResource(resource));

@@ -80,11 +80,20 @@ public class FieldSyncCommandServiceImpl implements FieldSyncCommandService {
             return Result.failure(unknownProspect.get());
         }
         var referencedLots = command.reservations().stream().map(ReservationData::lotId).collect(Collectors.toSet());
-        var knownLots = externalFinancialService.existingLotIds(referencedLots);
+        var lotPrices = externalFinancialService.lotPrices(referencedLots);
         for (int index = 0; index < command.reservations().size(); index++) {
-            if (!knownLots.contains(command.reservations().get(index).lotId())) {
+            var reservation = command.reservations().get(index);
+            var price = lotPrices.get(reservation.lotId());
+            if (price == null) {
                 var field = "reservations[%d].lotId".formatted(index);
                 return Result.failure(ApplicationError.validationError(field, field + ": lot does not exist"));
+            }
+            // US-58, Scenario 2: the same range the field app enforces, so a discount never leaves nothing to pay.
+            var discount = reservation.discountAmount();
+            if (discount != null && discount.compareTo(price) >= 0) {
+                var field = "reservations[%d].discountAmount".formatted(index);
+                return Result.failure(ApplicationError.validationError(field,
+                        "%s: the discount must be less than the lot price (%s)".formatted(field, price.toPlainString())));
             }
         }
         var prospectsSynced = prospectCommandService.handle(new RegisterProspectsCommand(agentId, command.prospects()));

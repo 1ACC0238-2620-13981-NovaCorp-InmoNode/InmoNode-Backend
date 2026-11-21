@@ -68,11 +68,12 @@ public class ReservationCommandServiceImpl implements ReservationCommandService 
         if (!lot.isAvailable(now)) {
             var conflicted = reservationRepository.save(Reservation.cancelledByConflict(command.lotId(),
                     command.agentId(), command.prospectId(), command.sourceEventId(), command.initialAmount(),
-                    command.reservedAt()));
+                    command.reservedAt(), command.terms()));
             return FieldReservationOutcome.conflict(conflicted, ConflictReason.LOT_UNAVAILABLE);
         }
         var reservation = reservationRepository.save(Reservation.fromFieldSync(command.lotId(), command.agentId(),
-                command.prospectId(), command.sourceEventId(), command.initialAmount(), command.reservedAt()));
+                command.prospectId(), command.sourceEventId(), command.initialAmount(), command.reservedAt(),
+                command.terms()));
         lot.block(Objects.requireNonNull(reservation.getId()), now, ReservationChannel.FIELD.blockValidity());
         var blocked = lotRepository.save(lot);
         return FieldReservationOutcome.synced(reservation, Objects.requireNonNull(blocked.getBlockedUntil()));

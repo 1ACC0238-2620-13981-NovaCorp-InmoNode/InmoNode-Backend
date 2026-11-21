@@ -1,6 +1,7 @@
 package com.novacorp.inmonode.inmonodebackend.financial.domain.model.commands;
 
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.Money;
+import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.NegotiationTerms;
 
 import java.time.Instant;
 import java.util.UUID;
@@ -11,7 +12,8 @@ import java.util.UUID;
  * @param sourceEventId id generated on the device for the reservation; a re-send carries the same one
  * @param prospectId    id generated on the device for the prospect, who lives in the field context
  * @param reservedAt    when the agent registered it on the device
+ * @param terms         special conditions agreed in the field (US-58); {@link NegotiationTerms#NONE} when none
  */
 public record ConsolidateFieldReservationCommand(UUID sourceEventId, Long lotId, Long agentId, UUID prospectId,
-                                                 Money initialAmount, Instant reservedAt) {
+                                                 Money initialAmount, Instant reservedAt, NegotiationTerms terms) {
 }

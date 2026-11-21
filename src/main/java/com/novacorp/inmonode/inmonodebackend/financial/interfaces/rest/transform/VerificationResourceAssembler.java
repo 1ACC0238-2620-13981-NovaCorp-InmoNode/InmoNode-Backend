@@ -12,12 +12,14 @@ public final class VerificationResourceAssembler {
     public static PendingVerificationResource toResourceFromPending(PendingVerification pending) {
         var evidence = pending.evidence();
         var reservation = pending.reservation();
+        var terms = reservation.getNegotiationTerms();
         return new PendingVerificationResource(evidence.getId(), evidence.getReference(), evidence.getSource().name(),
                 evidence.getAmount().amount(), evidence.getAmount().currency(), evidence.getOperationDate(),
                 evidence.getOperationCode(), evidence.isManuallyCorrected(), evidence.isLate(),
                 evidence.getSubmittedAt(), reservation.getId(), reservation.getSourceEventId(),
                 reservation.getChannel().name(), reservation.getRequesterId(), reservation.getStatus().name(),
-                reservation.getInitialAmount().amount(), pending.lot().getId(), pending.lot().getCode());
+                reservation.getInitialAmount().amount(), pending.lot().getId(), pending.lot().getCode(),
+                terms.discountAmount(), terms.bonus(), terms.notes());
     }
 
     public static VerificationDecisionResource toResourceFromOutcome(VerificationOutcome outcome) {

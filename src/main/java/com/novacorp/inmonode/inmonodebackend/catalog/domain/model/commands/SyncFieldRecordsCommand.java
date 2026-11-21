@@ -1,6 +1,7 @@
 package com.novacorp.inmonode.inmonodebackend.catalog.domain.model.commands;
 
 import com.novacorp.inmonode.inmonodebackend.catalog.domain.model.commands.RegisterProspectsCommand.ProspectData;
+import org.jspecify.annotations.Nullable;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -14,10 +15,14 @@ import java.util.UUID;
 public record SyncFieldRecordsCommand(List<ProspectData> prospects, List<ReservationData> reservations) {
 
     /**
-     * @param reservationId id generated on the device; a re-send carries the same one
-     * @param prospectId    a prospect of this sync or one the agent synchronized before
+     * @param reservationId    id generated on the device; a re-send carries the same one
+     * @param prospectId       a prospect of this sync or one the agent synchronized before
+     * @param discountAmount   optional discount on the lot price agreed in the field (US-58)
+     * @param bonus            optional bonus agreed in the field
+     * @param negotiationNotes optional notes of the negotiation
      */
     public record ReservationData(UUID reservationId, Long lotId, UUID prospectId, BigDecimal initialAmount,
-                                  Instant reservedAt) {
+                                  Instant reservedAt, @Nullable BigDecimal discountAmount, @Nullable String bonus,
+                                  @Nullable String negotiationNotes) {
     }
 }
