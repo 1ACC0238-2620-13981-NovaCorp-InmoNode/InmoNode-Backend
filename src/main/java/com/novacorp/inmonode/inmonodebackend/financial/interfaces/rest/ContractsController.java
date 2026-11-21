@@ -2,12 +2,15 @@ package com.novacorp.inmonode.inmonodebackend.financial.interfaces.rest;
 
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.commands.AcknowledgeContractCommand;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.commands.IssueContractCommand;
+import com.novacorp.inmonode.inmonodebackend.financial.domain.model.commands.RequestContractDocumentCommand;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.commands.RequestContractUploadCommand;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.queries.GetReservationContractQuery;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.services.ContractCommandService;
+import com.novacorp.inmonode.inmonodebackend.financial.domain.services.ContractDocumentCommandService;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.services.ContractQueryService;
 import com.novacorp.inmonode.inmonodebackend.financial.interfaces.rest.resources.ContractDocumentResource;
 import com.novacorp.inmonode.inmonodebackend.financial.interfaces.rest.transform.ContractResourceAssembler;
+import com.novacorp.inmonode.inmonodebackend.financial.interfaces.rest.transform.DocumentRequestResourceAssembler;
 import com.novacorp.inmonode.inmonodebackend.shared.interfaces.rest.transform.ResponseEntityAssembler;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -35,11 +38,30 @@ public class ContractsController {
 
     private final ContractCommandService contractCommandService;
     private final ContractQueryService contractQueryService;
+    private final ContractDocumentCommandService contractDocumentCommandService;
 
     public ContractsController(ContractCommandService contractCommandService,
-                               ContractQueryService contractQueryService) {
+                               ContractQueryService contractQueryService,
+                               ContractDocumentCommandService contractDocumentCommandService) {
         this.contractCommandService = contractCommandService;
         this.contractQueryService = contractQueryService;
+        this.contractDocumentCommandService = contractDocumentCommandService;
+    }
+
+    @PostMapping("/reservations/{transactionId}/contract/document-requests")
+    @PreAuthorize("hasRole('FINANCE_ADMIN')")
+    @Operation(summary = "Have the backend generate the contract PDF of a reservation (US-45)",
+            description = "Finance back office only (FINANCE_ADMIN), instead of uploading a PDF made by hand. Answers "
+                    + "202 at once with the request PROCESSING (\"En proceso\"): the document consumer writes the "
+                    + "preliminary contract from the reservation, lot and project, and stores the PDF where an upload "
+                    + "would go. Read statusUrl until it is READY, then issue the contract with requestId as "
+                    + "documentId and its sizeBytes; finance is also notified. Answers 404 RESERVATION_NOT_FOUND, 422 "
+                    + "BUSINESS_RULE_VIOLATION when the reservation is not verified or was made in the field, and 409 "
+                    + "CONTRACT_CONFLICT when its contract was already issued.")
+    public ResponseEntity<?> requestDocument(@PathVariable UUID transactionId) {
+        var result = contractDocumentCommandService.handle(new RequestContractDocumentCommand(transactionId));
+        return ResponseEntityAssembler.toResponseEntityFromResult(
+                result, DocumentRequestResourceAssembler::toResourceFromRequest, HttpStatus.ACCEPTED);
     }
 
     @PostMapping("/reservations/{transactionId}/contract/upload-url")

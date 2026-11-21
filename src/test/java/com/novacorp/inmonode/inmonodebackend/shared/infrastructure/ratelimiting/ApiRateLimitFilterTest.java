@@ -39,6 +39,14 @@ class ApiRateLimitFilterTest {
     }
 
     @Test
+    void requestingABackgroundPdfCountsAsAPdfButFollowingItDoesNot() throws Exception {
+        // One call of each bucket here: the status read spends the general one, the request the PDF one.
+        assertEquals(200, call("GET", "/api/v1/document-requests/a", null).getStatus());
+        assertEquals(200, call("POST", "/api/v1/quotations/1/document-requests", null).getStatus());
+        assertEquals(429, call("POST", "/api/v1/reservations/b/contract/document-requests", null).getStatus());
+    }
+
+    @Test
     void changingUntrustedForwardedHeadersDoesNotResetTheIp() throws Exception {
         assertEquals(200, call("POST", "/api/v1/auth/sign-in", "10.0.0.1").getStatus());
         assertEquals(429, call("POST", "/api/v1/auth/sign-in", "10.0.0.2").getStatus());

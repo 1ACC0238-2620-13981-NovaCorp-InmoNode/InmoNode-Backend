@@ -40,6 +40,23 @@ services:
       - "${MAIL_HOST_PORT:-1025}:1025"
       - "${MAIL_WEB_PORT:-8025}:8025"
 
+  inmonode-broker:
+    # Local message broker of the background PDFs (US-45; CloudAMQP in production). Management UI at
+    # http://localhost:15672. RabbitMQ only lets 'guest' in from its own host, hence a user of its own.
+    image: rabbitmq:4.1-management-alpine
+    container_name: inmonode-broker
+    environment:
+      RABBITMQ_DEFAULT_USER: ${BROKER_USER:-inmonode-dev}
+      RABBITMQ_DEFAULT_PASS: ${BROKER_PASSWORD:-inmonode-dev-secret}
+    ports:
+      - "${BROKER_HOST_PORT:-5672}:5672"
+      - "${BROKER_CONSOLE_PORT:-15672}:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
   inmonode-backend:
     image: inmonode-backend:0.0.1
     container_name: inmonode-backend
@@ -53,6 +70,8 @@ services:
         condition: service_started
       inmonode-storage:
         condition: service_started
+      inmonode-broker:
+        condition: service_healthy
     ports:
       - "${PORT:-8080}:8080"
     environment:
@@ -97,6 +116,9 @@ services:
       STORAGE_S3_SECRET_KEY: ${STORAGE_S3_SECRET_KEY:-inmonode-dev-secret}
       STORAGE_S3_PATH_STYLE_ACCESS: "true"
       STORAGE_S3_CREATE_BUCKET: "true"
+      # US-45: PDF requests go through the broker; the consumer aborts a rendering after this long.
+      CLOUDAMQP_URL: amqp://${BROKER_USER:-inmonode-dev}:${BROKER_PASSWORD:-inmonode-dev-secret}@inmonode-broker:5672
+      DOCUMENT_RENDER_TIMEOUT: ${DOCUMENT_RENDER_TIMEOUT:-PT30S}
 
 volumes:
   inmonode-db-data:

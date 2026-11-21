@@ -74,6 +74,25 @@ class S3ObjectStorageIntegrationTest {
     }
 
     @Test
+    void theBackendStoresAFileItGeneratedAndWritingItAgainReplacesIt() throws Exception {
+        var key = uniqueKey();
+        var first = new byte[1500];
+        first[0] = 1;
+        var second = new byte[900];
+        second[0] = 2;
+
+        objectStorage.store(key, "application/pdf", first);
+        objectStorage.store(key, "application/pdf", second);
+
+        var stored = objectStorage.describe(key).orElseThrow();
+        assertEquals(second.length, stored.sizeBytes());
+        assertEquals("application/pdf", stored.contentType());
+        var response = http.send(HttpRequest.newBuilder(objectStorage.presignDownload(key, Duration.ofMinutes(10)).url())
+                .GET().build(), HttpResponse.BodyHandlers.ofByteArray());
+        assertArrayEquals(second, response.body());
+    }
+
+    @Test
     void aClientDownloadsTheStoredObjectWithThePresignedUrl() throws Exception {
         var key = uniqueKey();
         var image = new byte[2048];

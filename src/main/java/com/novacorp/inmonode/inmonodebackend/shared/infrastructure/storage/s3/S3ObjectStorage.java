@@ -3,6 +3,7 @@ package com.novacorp.inmonode.inmonodebackend.shared.infrastructure.storage.s3;
 import com.novacorp.inmonode.inmonodebackend.shared.application.storage.ObjectStorage;
 import com.novacorp.inmonode.inmonodebackend.shared.infrastructure.storage.s3.configuration.S3StorageProperties;
 import org.springframework.stereotype.Component;
+import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.HeadObjectRequest;
@@ -66,6 +67,16 @@ public class S3ObjectStorage implements ObjectStorage {
         } catch (URISyntaxException ex) {
             throw new IllegalStateException("The storage signed an invalid URL", ex);
         }
+    }
+
+    @Override
+    public void store(String key, String contentType, byte[] content) {
+        s3Client.putObject(PutObjectRequest.builder()
+                .bucket(bucket)
+                .key(key)
+                .contentType(contentType)
+                .contentLength((long) content.length)
+                .build(), RequestBody.fromBytes(content));
     }
 
     @Override
