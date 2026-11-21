@@ -2,6 +2,7 @@ package com.novacorp.inmonode.inmonodebackend.catalog.interfaces.rest.resources;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
@@ -34,16 +35,24 @@ public record FieldSyncResource(
     }
 
     /**
-     * @param id            id generated on the device; send the same one when retrying
-     * @param prospectId    a prospect of this sync or one synchronized before
-     * @param initialAmount down payment agreed in the field, in soles
-     * @param reservedAt    when the agent registered the reservation on the device
+     * The last three fields are the optional negotiation terms authorized by management (US-58).
+     *
+     * @param id               id generated on the device; send the same one when retrying
+     * @param prospectId       a prospect of this sync or one synchronized before
+     * @param initialAmount    down payment agreed in the field, in soles
+     * @param reservedAt       when the agent registered the reservation on the device
+     * @param discountAmount   discount on the lot price, in soles: zero or more, below the lot price, two decimals
+     * @param bonus            bonus agreed with the client, free text that does not change the price
+     * @param negotiationNotes notes of the negotiation
      */
     public record ReservationRecord(
             @NotNull UUID id,
             @NotNull Long lotId,
             @NotNull UUID prospectId,
             @NotNull @DecimalMin(value = "0", inclusive = false) BigDecimal initialAmount,
-            @NotNull Instant reservedAt) {
+            @NotNull Instant reservedAt,
+            @DecimalMin("0") @Digits(integer = 12, fraction = 2) BigDecimal discountAmount,
+            @Size(max = 150) String bonus,
+            @Size(max = 500) String negotiationNotes) {
     }
 }

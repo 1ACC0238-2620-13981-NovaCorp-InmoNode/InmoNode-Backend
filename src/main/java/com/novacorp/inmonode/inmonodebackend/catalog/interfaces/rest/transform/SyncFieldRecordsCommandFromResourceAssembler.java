@@ -16,7 +16,8 @@ public final class SyncFieldRecordsCommandFromResourceAssembler {
                 .toList();
         var reservations = resource.reservations().stream()
                 .map(reservation -> new ReservationData(reservation.id(), reservation.lotId(), reservation.prospectId(),
-                        reservation.initialAmount(), reservation.reservedAt()))
+                        reservation.initialAmount(), reservation.reservedAt(), reservation.discountAmount(),
+                        reservation.bonus(), reservation.negotiationNotes()))
                 .toList();
         return new SyncFieldRecordsCommand(prospects, reservations);
     }

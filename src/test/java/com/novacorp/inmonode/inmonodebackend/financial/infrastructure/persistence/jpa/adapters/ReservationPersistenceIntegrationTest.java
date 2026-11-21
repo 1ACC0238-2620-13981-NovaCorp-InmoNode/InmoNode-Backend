@@ -9,6 +9,7 @@ import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.LotDimensions;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.LotStatus;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.Money;
+import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.NegotiationTerms;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.ReservationStatus;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.repositories.LotRepository;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.repositories.ProjectRepository;
@@ -77,6 +78,22 @@ class ReservationPersistenceIntegrationTest {
         assertEquals(LotStatus.BLOCKED, blocked.getStatus());
         assertEquals(reservation.getId(), blocked.getCurrentReservationId());
         assertEquals(now.plus(DAY), blocked.getBlockedUntil());
+    }
+
+    @Test
+    void theNegotiationTermsOfAFieldReservationAreStoredAndRead() {
+        var lot = persistedLot();
+        var agreed = UUID.randomUUID();
+        var plain = UUID.randomUUID();
+        var terms = new NegotiationTerms(new BigDecimal("2500.50"), "Cochera", "Autorizado por gerencia");
+        reservationRepository.save(Reservation.fromFieldSync(lot.getId(), 7L, UUID.randomUUID(), agreed, AMOUNT,
+                Instant.now(), terms));
+        reservationRepository.save(Reservation.cancelledByConflict(lot.getId(), 7L, UUID.randomUUID(), plain, AMOUNT,
+                Instant.now()));
+
+        assertEquals(terms, reservationRepository.findBySourceEventId(agreed).orElseThrow().getNegotiationTerms());
+        assertEquals(NegotiationTerms.NONE,
+                reservationRepository.findBySourceEventId(plain).orElseThrow().getNegotiationTerms());
     }
 
     @Test

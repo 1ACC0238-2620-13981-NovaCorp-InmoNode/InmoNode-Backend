@@ -3,6 +3,7 @@ package com.novacorp.inmonode.inmonodebackend.financial.domain.model.aggregates;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.entities.PaymentEvidence;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.FinancingPlan;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.Money;
+import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.NegotiationTerms;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.PaymentEvidenceSource;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.PaymentEvidenceStatus;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.ReservationChannel;
@@ -74,6 +75,22 @@ class ReservationTest {
                 () -> new FinancingPlan(Money.of(new BigDecimal("45000")), 0, BigDecimal.TEN));
         assertThrows(IllegalArgumentException.class,
                 () -> new FinancingPlan(Money.of(new BigDecimal("45000")), 12, new BigDecimal("-1")));
+    }
+
+    @Test
+    void aFieldReservationKeepsTheTermsAgreedAndAWebOneHasNone() {
+        var terms = new NegotiationTerms(new BigDecimal("2500"), "Cochera", "Autorizado por gerencia");
+
+        assertEquals(terms, Reservation.fromFieldSync(3L, 7L, PROSPECT, SOURCE, AMOUNT, RESERVED_AT, terms)
+                .getNegotiationTerms());
+        assertEquals(terms, Reservation.cancelledByConflict(3L, 7L, PROSPECT, SOURCE, AMOUNT, RESERVED_AT, terms)
+                .getNegotiationTerms(), "a conflict keeps what was agreed, for the reassignment");
+        assertEquals(NegotiationTerms.NONE, Reservation.fromFieldSync(3L, 7L, PROSPECT, SOURCE, AMOUNT, RESERVED_AT)
+                .getNegotiationTerms());
+        assertEquals(NegotiationTerms.NONE, Reservation.fromWebRequest(3L, 41L, SOURCE, AMOUNT, PLAN, RESERVED_AT)
+                .getNegotiationTerms());
+        assertThrows(IllegalArgumentException.class,
+                () -> Reservation.fromFieldSync(3L, 7L, PROSPECT, SOURCE, AMOUNT, RESERVED_AT, null));
     }
 
     @Test

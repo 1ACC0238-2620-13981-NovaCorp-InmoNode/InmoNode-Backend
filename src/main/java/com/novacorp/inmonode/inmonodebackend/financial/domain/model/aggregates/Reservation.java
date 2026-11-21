@@ -3,6 +3,7 @@ package com.novacorp.inmonode.inmonodebackend.financial.domain.model.aggregates;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.entities.PaymentEvidence;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.FinancingPlan;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.Money;
+import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.NegotiationTerms;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.ReservationChannel;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.ReservationStatus;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.CoOwner;
@@ -27,6 +28,7 @@ public class Reservation {
 
     private @Nullable Instant resubmissionDeadline;
     private @Nullable CoOwner coOwner;
+    private NegotiationTerms negotiationTerms = NegotiationTerms.NONE;
     private final @Nullable Long id;
     private final Long lotId;
     private final ReservationChannel channel;
@@ -66,7 +68,19 @@ public class Reservation {
      */
     public static Reservation fromFieldSync(Long lotId, Long agentId, UUID prospectId, UUID sourceEventId,
                                             Money initialAmount, Instant reservedAt) {
-        return field(lotId, agentId, prospectId, sourceEventId, initialAmount, reservedAt, ReservationStatus.BLOCKED);
+        return fromFieldSync(lotId, agentId, prospectId, sourceEventId, initialAmount, reservedAt,
+                NegotiationTerms.NONE);
+    }
+
+    /**
+     * US-11 with the special conditions the agent agreed (US-58), kept so the record reflects what was negotiated.
+     *
+     * @param terms {@link NegotiationTerms#NONE} when nothing special was agreed
+     */
+    public static Reservation fromFieldSync(Long lotId, Long agentId, UUID prospectId, UUID sourceEventId,
+                                            Money initialAmount, Instant reservedAt, NegotiationTerms terms) {
+        return field(lotId, agentId, prospectId, sourceEventId, initialAmount, reservedAt, ReservationStatus.BLOCKED,
+                terms);
     }
 
     /**
@@ -75,8 +89,15 @@ public class Reservation {
      */
     public static Reservation cancelledByConflict(Long lotId, Long agentId, UUID prospectId, UUID sourceEventId,
                                                   Money initialAmount, Instant reservedAt) {
+        return cancelledByConflict(lotId, agentId, prospectId, sourceEventId, initialAmount, reservedAt,
+                NegotiationTerms.NONE);
+    }
+
+    /** US-12, keeping the conditions the agent agreed (US-58) as they reached the server. */
+    public static Reservation cancelledByConflict(Long lotId, Long agentId, UUID prospectId, UUID sourceEventId,
+                                                  Money initialAmount, Instant reservedAt, NegotiationTerms terms) {
         return field(lotId, agentId, prospectId, sourceEventId, initialAmount, reservedAt,
-                ReservationStatus.CANCELLED_BY_CONFLICT);
+                ReservationStatus.CANCELLED_BY_CONFLICT, terms);
     }
 
     /**
@@ -113,13 +134,17 @@ public class Reservation {
     }
 
     private static Reservation field(Long lotId, Long agentId, UUID prospectId, UUID sourceEventId,
-                                     Money initialAmount, Instant reservedAt, ReservationStatus status) {
+                                     Money initialAmount, Instant reservedAt, ReservationStatus status,
+                                     NegotiationTerms terms) {
         if (lotId == null || agentId == null || prospectId == null || sourceEventId == null
-                || initialAmount == null || reservedAt == null) {
-            throw new IllegalArgumentException("a field reservation needs its lot, agent, prospect, id, amount and date");
+                || initialAmount == null || reservedAt == null || terms == null) {
+            throw new IllegalArgumentException(
+                    "a field reservation needs its lot, agent, prospect, id, amount, date and terms");
         }
-        return new Reservation(null, lotId, ReservationChannel.FIELD, agentId, prospectId, sourceEventId,
+        var reservation = new Reservation(null, lotId, ReservationChannel.FIELD, agentId, prospectId, sourceEventId,
                 initialAmount, reservedAt, status, List.of(), null, null);
+        reservation.negotiationTerms = terms;
+        return reservation;
     }
 
     /**
@@ -251,8 +276,15 @@ public class Reservation {
         restored.resubmissionDeadline = deadline;
         return restored;
     }
+
+    public static Reservation withNegotiationTerms(Reservation restored, NegotiationTerms terms) {
+        restored.negotiationTerms = terms == null ? NegotiationTerms.NONE : terms;
+        return restored;
+    }
     public @Nullable Instant getResubmissionDeadline() { return resubmissionDeadline; }
     public @Nullable CoOwner getCoOwner() { return coOwner; }
+    /** What the agent agreed in the field (US-58); {@link NegotiationTerms#NONE} for a web reservation. */
+    public NegotiationTerms getNegotiationTerms() { return negotiationTerms; }
 
     public @Nullable Long getId() { return id; }
     public Long getLotId() { return lotId; }

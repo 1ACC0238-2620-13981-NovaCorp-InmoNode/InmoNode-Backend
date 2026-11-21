@@ -4,6 +4,7 @@ import com.jayway.jsonpath.JsonPath;
 import com.novacorp.inmonode.inmonodebackend.TestcontainersConfiguration;
 import com.novacorp.inmonode.inmonodebackend.catalog.domain.repositories.ProspectRepository;
 import com.novacorp.inmonode.inmonodebackend.catalog.interfaces.events.FieldLotReservedEvent;
+import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.NegotiationTerms;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.repositories.ReservationRepository;
 import com.novacorp.inmonode.inmonodebackend.iam.application.internal.outboundservices.tokens.TokenService;
 import com.novacorp.inmonode.inmonodebackend.iam.domain.model.aggregates.User;
@@ -175,6 +176,76 @@ class FieldRecordsControllerIntegrationTest {
     }
 
     @Test
+    void theNegotiationTermsAgreedInTheFieldAreKeptWithTheReservation() throws Exception {
+        var agent = AGENTS.incrementAndGet();
+        var lots = lotIdsByCode(publishedProject());
+        var ana = UUID.randomUUID();
+        var agreed = UUID.randomUUID();
+        var plain = UUID.randomUUID();
+        var lost = UUID.randomUUID();
+        var terms = """
+                "discountAmount": 2500.50, "bonus": "Cochera", "negotiationNotes": "Autorizado por gerencia\"""";
+
+        sync(agent, payload(List.of(prospect(ana, "12345678", "Ana Quispe")),
+                List.of(reservation(agreed, lots.get("A-01"), ana, terms), reservation(plain, lots.get("A-02"), ana),
+                        reservation(lost, lots.get("A-01"), ana, terms))))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.reservations[0].result").value("SYNCED"))
+                .andExpect(jsonPath("$.reservations[2].result").value("CONFLICT"));
+
+        var expected = new NegotiationTerms(new BigDecimal("2500.50"), "Cochera", "Autorizado por gerencia");
+        assertEquals(expected, reservationRepository.findBySourceEventId(agreed).orElseThrow().getNegotiationTerms());
+        assertEquals(expected, reservationRepository.findBySourceEventId(lost).orElseThrow().getNegotiationTerms(),
+                "a conflict keeps what was agreed");
+        assertEquals(NegotiationTerms.NONE,
+                reservationRepository.findBySourceEventId(plain).orElseThrow().getNegotiationTerms());
+    }
+
+    @Test
+    void aDiscountThatReachesTheLotPriceRejectsTheSyncAndNothingIsStored() throws Exception {
+        var agent = AGENTS.incrementAndGet();
+        var lots = lotIdsByCode(publishedProject());
+        var ana = UUID.randomUUID();
+        var valid = UUID.randomUUID();
+
+        sync(agent, payload(List.of(prospect(ana, "12345678", "Ana Quispe")),
+                List.of(reservation(valid, lots.get("A-02"), ana, "\"discountAmount\": 44000.49"),
+                        reservation(UUID.randomUUID(), lots.get("A-01"), ana, "\"discountAmount\": 45000"))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
+                .andExpect(jsonPath("$.details").value(containsString("reservations[1].discountAmount")));
+
+        assertTrue(prospectRepository.findByProspectIds(List.of(ana)).isEmpty());
+        assertTrue(reservationRepository.findBySourceEventId(valid).isEmpty());
+    }
+
+    @Test
+    void negotiationTermsOutOfTheirLimitsRejectTheSync() throws Exception {
+        var agent = AGENTS.incrementAndGet();
+        var lots = lotIdsByCode(publishedProject());
+        var ana = UUID.randomUUID();
+        var prospects = List.of(prospect(ana, "12345678", "Ana Quispe"));
+
+        sync(agent, payload(prospects, List.of(reservation(UUID.randomUUID(), lots.get("A-01"), ana,
+                "\"discountAmount\": -1"))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.details").value(containsString("reservations[0].discountAmount")));
+        sync(agent, payload(prospects, List.of(reservation(UUID.randomUUID(), lots.get("A-01"), ana,
+                "\"discountAmount\": 10.005"))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.details").value(containsString("reservations[0].discountAmount")));
+        sync(agent, payload(prospects, List.of(reservation(UUID.randomUUID(), lots.get("A-01"), ana,
+                "\"bonus\": \"%s\"".formatted("b".repeat(151))))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.details").value(containsString("reservations[0].bonus")));
+        sync(agent, payload(prospects, List.of(reservation(UUID.randomUUID(), lots.get("A-01"), ana,
+                "\"negotiationNotes\": \"%s\"".formatted("n".repeat(501))))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.details").value(containsString("reservations[0].negotiationNotes")));
+        assertTrue(prospectRepository.findByProspectIds(List.of(ana)).isEmpty());
+    }
+
+    @Test
     void reservationsMustNameAProspectOfTheSyncOrOneTheAgentSentBefore() throws Exception {
         var agent = AGENTS.incrementAndGet();
         var otherAgent = AGENTS.incrementAndGet();
@@ -230,6 +301,12 @@ class FieldRecordsControllerIntegrationTest {
         return """
                 {"id": "%s", "lotId": %s, "prospectId": "%s", "initialAmount": 1500,
                  "reservedAt": "2026-10-08T09:30:00Z"}""".formatted(id, lotId, prospectId);
+    }
+
+    /** A reservation with negotiation terms, given as the JSON members to add (US-58). */
+    private static String reservation(UUID id, Long lotId, UUID prospectId, String terms) {
+        var plain = reservation(id, lotId, prospectId);
+        return plain.substring(0, plain.length() - 1) + ", " + terms + "}";
     }
 
     /** A published project with the 3 valid lots of the fixture plan (A-01 to A-03). */

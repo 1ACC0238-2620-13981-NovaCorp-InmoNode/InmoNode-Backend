@@ -112,6 +112,27 @@ class VerificationIntegrationTest {
         assertEquals(false, entry(queue, fieldEvidence, "late"));
         assertEquals("WEB", entry(queue, webEvidence, "channel"));
         assertEquals((int) BUYER, entry(queue, webEvidence, "requesterId"));
+        assertNull(entry(queue, fieldEvidence, "discountAmount"), "nothing special was agreed");
+        assertNull(entry(queue, webEvidence, "bonus"));
+    }
+
+    @Test
+    void theQueueShowsTheNegotiationTermsAgreedInTheField() throws Exception {
+        var lot = lot("F-02");
+        var reservationId = UUID.randomUUID();
+        var outcome = fieldFacade.consolidate(reservationId, lot.getId(), AGENT, UUID.randomUUID(),
+                new BigDecimal("1500"), Instant.now().minusSeconds(600), new BigDecimal("2500.50"), "Cochera",
+                "Autorizado por gerencia");
+        assertEquals("SYNCED", outcome.result());
+        var evidence = sendVoucher(reservationId, "1500");
+
+        var queue = mockMvc.perform(get("/api/v1/verifications/pending").header(HttpHeaders.AUTHORIZATION, finance()))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+
+        assertEquals(2500.50, ((Number) entry(queue, evidence, "discountAmount")).doubleValue());
+        assertEquals("Cochera", entry(queue, evidence, "bonus"));
+        assertEquals("Autorizado por gerencia", entry(queue, evidence, "negotiationNotes"));
     }
 
     @Test

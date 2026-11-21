@@ -3,6 +3,7 @@ package com.novacorp.inmonode.inmonodebackend.financial.domain.repositories;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.aggregates.Lot;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.LotStatistics;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.LotFilters;
+import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.Money;
 
 import java.time.Instant;
 import java.util.Collection;
@@ -15,7 +16,8 @@ import java.util.Set;
  * Persistence abstraction for the {@link Lot} aggregate.
  */
 public interface LotRepository {
-    Set<Long> existingIds(Set<Long> ids);
+    /** Price of each existing lot among {@code ids}; a lot that does not exist is left out. */
+    Map<Long, Money> pricesOf(Set<Long> ids);
 
     /**
      * @return the persisted lots, with their generated ids

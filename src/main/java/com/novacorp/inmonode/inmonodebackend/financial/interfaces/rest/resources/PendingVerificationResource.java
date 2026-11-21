@@ -12,12 +12,17 @@ import java.util.UUID;
  * @param late          it arrived after the reservation stopped holding its lot: it can only be rejected
  * @param transactionId id of the reservation shared by every context
  * @param requesterId   the agent (field) or the buyer (web) who made the reservation
- * @param initialAmount the down payment the evidence must cover, in {@code currency}
+ * @param initialAmount    the down payment the evidence must cover, in {@code currency}
+ * @param discountAmount   discount on the lot price the field agent agreed (US-58), in {@code currency}; {@code null}
+ *                         when none, always for a web reservation
+ * @param bonus            bonus the field agent agreed, which does not change the price; {@code null} when none
+ * @param negotiationNotes notes of the field negotiation; {@code null} when none
  */
 public record PendingVerificationResource(Long evidenceId, UUID reference, String source, BigDecimal amount,
                                           String currency, LocalDate operationDate, String operationCode,
                                           boolean manuallyCorrected, boolean late, Instant submittedAt,
                                           Long reservationId, UUID transactionId, String channel, Long requesterId,
                                           String reservationStatus, BigDecimal initialAmount, Long lotId,
-                                          String lotCode) {
+                                          String lotCode, BigDecimal discountAmount, String bonus,
+                                          String negotiationNotes) {
 }
