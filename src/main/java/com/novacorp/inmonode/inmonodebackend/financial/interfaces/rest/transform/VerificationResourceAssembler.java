@@ -13,13 +13,16 @@ public final class VerificationResourceAssembler {
         var evidence = pending.evidence();
         var reservation = pending.reservation();
         var terms = reservation.getNegotiationTerms();
+        var identityDocument = pending.identityDocument();
         return new PendingVerificationResource(evidence.getId(), evidence.getReference(), evidence.getSource().name(),
                 evidence.getAmount().amount(), evidence.getAmount().currency(), evidence.getOperationDate(),
                 evidence.getOperationCode(), evidence.isManuallyCorrected(), evidence.isLate(),
                 evidence.getSubmittedAt(), reservation.getId(), reservation.getSourceEventId(),
                 reservation.getChannel().name(), reservation.getRequesterId(), reservation.getStatus().name(),
                 reservation.getInitialAmount().amount(), pending.lot().getId(), pending.lot().getCode(),
-                terms.discountAmount(), terms.bonus(), terms.notes());
+                terms.discountAmount(), terms.bonus(), terms.notes(), reservation.isIdentityDocumentPending(),
+                identityDocument == null ? null : identityDocument.url().toString(),
+                identityDocument == null ? null : identityDocument.expiresAt());
     }
 
     public static VerificationDecisionResource toResourceFromOutcome(VerificationOutcome outcome) {

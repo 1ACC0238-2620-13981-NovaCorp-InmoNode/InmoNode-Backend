@@ -44,7 +44,10 @@ public class VerificationController {
     @Operation(summary = "Get the verification queue",
             description = "Finance back office only (FINANCE_ADMIN). Every payment evidence waiting for a decision, "
                     + "oldest first, with its reservation and lot. Late ones (received after the reservation stopped "
-                    + "holding its lot) are listed so they can be rejected.")
+                    + "holding its lot) are listed so they can be rejected. A field reservation whose agent has not "
+                    + "attached the photo of the buyer's identity document yet shows identityDocumentPending "
+                    + "(\"Documento de identidad pendiente\", US-59); once attached, identityDocumentUrl links to it "
+                    + "for 10 minutes.")
     public List<PendingVerificationResource> getPending() {
         return verificationQueryService.handle(new GetPendingVerificationsQuery()).stream()
                 .map(VerificationResourceAssembler::toResourceFromPending)

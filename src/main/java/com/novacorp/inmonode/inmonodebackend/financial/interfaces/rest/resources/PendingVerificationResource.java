@@ -17,6 +17,12 @@ import java.util.UUID;
  *                         when none, always for a web reservation
  * @param bonus            bonus the field agent agreed, which does not change the price; {@code null} when none
  * @param negotiationNotes notes of the field negotiation; {@code null} when none
+ * @param identityDocumentPending      a field reservation whose agent has not attached the photo of the buyer's
+ *                                     identity document yet, "Documento de identidad pendiente" (US-59); always
+ *                                     {@code false} for a web reservation
+ * @param identityDocumentUrl          link to view that photo with a plain {@code GET}; {@code null} while it is
+ *                                     pending and for a web reservation
+ * @param identityDocumentUrlExpiresAt the link is refused after this instant; read the queue again for a new one
  */
 public record PendingVerificationResource(Long evidenceId, UUID reference, String source, BigDecimal amount,
                                           String currency, LocalDate operationDate, String operationCode,
@@ -24,5 +30,6 @@ public record PendingVerificationResource(Long evidenceId, UUID reference, Strin
                                           Long reservationId, UUID transactionId, String channel, Long requesterId,
                                           String reservationStatus, BigDecimal initialAmount, Long lotId,
                                           String lotCode, BigDecimal discountAmount, String bonus,
-                                          String negotiationNotes) {
+                                          String negotiationNotes, boolean identityDocumentPending,
+                                          String identityDocumentUrl, Instant identityDocumentUrlExpiresAt) {
 }
