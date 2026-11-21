@@ -2,6 +2,7 @@ package com.novacorp.inmonode.inmonodebackend.financial.domain.model.aggregates;
 
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.entities.PaymentEvidence;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.FinancingPlan;
+import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.IdentityDocument;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.Money;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.NegotiationTerms;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.ReservationChannel;
@@ -29,6 +30,8 @@ public class Reservation {
     private @Nullable Instant resubmissionDeadline;
     private @Nullable CoOwner coOwner;
     private NegotiationTerms negotiationTerms = NegotiationTerms.NONE;
+    private @Nullable IdentityDocument identityDocument;
+    private @Nullable Instant identityDocumentAttachedAt;
     private final @Nullable Long id;
     private final Long lotId;
     private final ReservationChannel channel;
@@ -281,10 +284,52 @@ public class Reservation {
         restored.negotiationTerms = terms == null ? NegotiationTerms.NONE : terms;
         return restored;
     }
+
+    /**
+     * US-59: attaches the photo of the buyer's identity document that the agent captured in the field. Attaching the
+     * same photo again changes nothing, so a re-sent registration is harmless.
+     *
+     * @return whether it was attached now
+     * @throws IllegalStateException for a web reservation, a photo of another reservation, or when the reservation
+     *                               already has a different photo
+     */
+    public boolean attachIdentityDocument(IdentityDocument document, Instant attachedAt) {
+        if (channel != ReservationChannel.FIELD) {
+            throw new IllegalStateException("only a field reservation receives the identity document from the field app");
+        }
+        if (!document.transactionId().equals(sourceEventId)) {
+            throw new IllegalStateException("the identity document belongs to another reservation");
+        }
+        if (identityDocument != null) {
+            if (identityDocument.documentId().equals(document.documentId())) {
+                return false;
+            }
+            throw new IllegalStateException("the reservation already has another identity document");
+        }
+        identityDocument = document;
+        identityDocumentAttachedAt = attachedAt;
+        return true;
+    }
+
+    /** "Documento de identidad pendiente" (US-59): a field reservation whose agent has not attached the photo yet. */
+    public boolean isIdentityDocumentPending() {
+        return channel == ReservationChannel.FIELD && identityDocument == null;
+    }
+
+    public static Reservation withIdentityDocument(Reservation restored, @Nullable IdentityDocument document,
+                                                   @Nullable Instant attachedAt) {
+        restored.identityDocument = document;
+        restored.identityDocumentAttachedAt = document == null ? null : attachedAt;
+        return restored;
+    }
+
     public @Nullable Instant getResubmissionDeadline() { return resubmissionDeadline; }
     public @Nullable CoOwner getCoOwner() { return coOwner; }
     /** What the agent agreed in the field (US-58); {@link NegotiationTerms#NONE} for a web reservation. */
     public NegotiationTerms getNegotiationTerms() { return negotiationTerms; }
+    /** The photo of the buyer's identity document (US-59); {@code null} while it is pending or for a web reservation. */
+    public @Nullable IdentityDocument getIdentityDocument() { return identityDocument; }
+    public @Nullable Instant getIdentityDocumentAttachedAt() { return identityDocumentAttachedAt; }
 
     public @Nullable Long getId() { return id; }
     public Long getLotId() { return lotId; }

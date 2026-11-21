@@ -7,6 +7,7 @@ import com.novacorp.inmonode.inmonodebackend.financial.domain.model.aggregates.P
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.commands.ReceiveVoucherEvidenceCommand;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.commands.ReleaseExpiredLotBlocksCommand;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.FinancingRules;
+import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.IdentityDocument;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.LotBoundary;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.LotDimensions;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.LotStatus;
@@ -133,6 +134,35 @@ class VerificationIntegrationTest {
         assertEquals(2500.50, ((Number) entry(queue, evidence, "discountAmount")).doubleValue());
         assertEquals("Cochera", entry(queue, evidence, "bonus"));
         assertEquals("Autorizado por gerencia", entry(queue, evidence, "negotiationNotes"));
+    }
+
+    @Test
+    void theQueueShowsWhetherTheIdentityDocumentIsPendingOrALinkToViewIt() throws Exception {
+        var pending = fieldReservation(lot("F-03"));
+        var attached = fieldReservation(lot("F-04"));
+        var web = webReservation(lot("W-02"));
+        var photo = new IdentityDocument(attached, UUID.randomUUID(), "image/jpeg", 640_000);
+        var reservation = reservationRepository.findBySourceEventId(attached).orElseThrow();
+        reservation.attachIdentityDocument(photo, Instant.now());
+        reservationRepository.save(reservation);
+        var pendingEvidence = sendVoucher(pending, "1500");
+        var attachedEvidence = sendVoucher(attached, "1500");
+        var webEvidence = sendVoucher(web, "9000");
+        var before = Instant.now();
+
+        var queue = mockMvc.perform(get("/api/v1/verifications/pending").header(HttpHeaders.AUTHORIZATION, finance()))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+
+        assertEquals(true, entry(queue, pendingEvidence, "identityDocumentPending"));
+        assertNull(entry(queue, pendingEvidence, "identityDocumentUrl"));
+        assertEquals(false, entry(queue, attachedEvidence, "identityDocumentPending"));
+        assertTrue(((String) entry(queue, attachedEvidence, "identityDocumentUrl")).contains(photo.objectKey()));
+        var expiresAt = Instant.parse((String) entry(queue, attachedEvidence, "identityDocumentUrlExpiresAt"));
+        assertTrue(expiresAt.isAfter(before.plus(Duration.ofMinutes(9))), "valid for 10 minutes");
+        assertTrue(expiresAt.isBefore(before.plus(Duration.ofMinutes(11))), "valid for 10 minutes");
+        assertEquals(false, entry(queue, webEvidence, "identityDocumentPending"), "the web portal does not ask for it");
+        assertNull(entry(queue, webEvidence, "identityDocumentUrl"));
     }
 
     @Test

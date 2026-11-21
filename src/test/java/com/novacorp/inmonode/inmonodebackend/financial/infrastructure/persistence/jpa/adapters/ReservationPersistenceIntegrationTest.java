@@ -5,6 +5,7 @@ import com.novacorp.inmonode.inmonodebackend.financial.domain.model.aggregates.L
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.aggregates.Project;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.aggregates.Reservation;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.FinancingRules;
+import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.IdentityDocument;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.LotBoundary;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.LotDimensions;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.LotStatus;
@@ -94,6 +95,25 @@ class ReservationPersistenceIntegrationTest {
         assertEquals(terms, reservationRepository.findBySourceEventId(agreed).orElseThrow().getNegotiationTerms());
         assertEquals(NegotiationTerms.NONE,
                 reservationRepository.findBySourceEventId(plain).orElseThrow().getNegotiationTerms());
+    }
+
+    @Test
+    void theIdentityDocumentOfAFieldReservationIsStoredAndRead() {
+        var lot = persistedLot();
+        var source = UUID.randomUUID();
+        var attachedAt = Instant.now().truncatedTo(ChronoUnit.MICROS);
+        var photo = new IdentityDocument(source, UUID.randomUUID(), "image/jpeg", 640_000);
+        var reservation = reservationRepository.save(Reservation.fromFieldSync(lot.getId(), 7L, UUID.randomUUID(),
+                source, AMOUNT, Instant.now()));
+        assertTrue(reservationRepository.findBySourceEventId(source).orElseThrow().isIdentityDocumentPending());
+
+        reservation.attachIdentityDocument(photo, attachedAt);
+        reservationRepository.save(reservation);
+
+        var found = reservationRepository.findBySourceEventId(source).orElseThrow();
+        assertFalse(found.isIdentityDocumentPending());
+        assertEquals(photo, found.getIdentityDocument());
+        assertEquals(attachedAt, found.getIdentityDocumentAttachedAt());
     }
 
     @Test

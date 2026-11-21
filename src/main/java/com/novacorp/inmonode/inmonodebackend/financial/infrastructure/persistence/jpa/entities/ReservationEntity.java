@@ -91,6 +91,16 @@ public class ReservationEntity extends AuditableAbstractPersistenceEntity {
     @Column(length = 500)
     private String negotiationNotes;
 
+    /** Photo of the buyer's identity document captured in the field (US-59); all four are null while it is pending. */
+    private UUID identityDocumentId;
+
+    @Column(length = 20)
+    private String identityDocumentContentType;
+
+    private Long identityDocumentSizeBytes;
+
+    private Instant identityDocumentAttachedAt;
+
     /** A reservation receives few evidences and needs them all to be rebuilt, so they are loaded with it. */
     @OneToMany(mappedBy = "reservation", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
     @OrderBy("id")

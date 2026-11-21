@@ -4,6 +4,7 @@ import com.novacorp.inmonode.inmonodebackend.financial.domain.model.aggregates.R
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.CoOwner;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.entities.PaymentEvidence;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.FinancingPlan;
+import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.IdentityDocument;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.Money;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.NegotiationTerms;
 import com.novacorp.inmonode.inmonodebackend.financial.infrastructure.persistence.jpa.entities.PaymentEvidenceEntity;
@@ -30,8 +31,18 @@ public final class ReservationEntityAssembler {
                 entity.getEvidences().stream().map(ReservationEntityAssembler::toDomain).toList(),
                 entity.getVerifiedAt(), toFinancingPlan(entity)), entity.getCoOwnerFullName() == null ? null :
                         new CoOwner(entity.getCoOwnerFullName(), entity.getCoOwnerDocumentType(), entity.getCoOwnerDocumentNumber())), entity.getResubmissionDeadline());
-        return Reservation.withNegotiationTerms(reservation,
+        Reservation.withNegotiationTerms(reservation,
                 new NegotiationTerms(entity.getDiscountAmount(), entity.getBonus(), entity.getNegotiationNotes()));
+        return Reservation.withIdentityDocument(reservation, toIdentityDocument(entity),
+                entity.getIdentityDocumentAttachedAt());
+    }
+
+    private static @Nullable IdentityDocument toIdentityDocument(ReservationEntity entity) {
+        if (entity.getIdentityDocumentId() == null) {
+            return null;
+        }
+        return new IdentityDocument(entity.getSourceEventId(), entity.getIdentityDocumentId(),
+                entity.getIdentityDocumentContentType(), entity.getIdentityDocumentSizeBytes());
     }
 
     private static @Nullable FinancingPlan toFinancingPlan(ReservationEntity entity) {
@@ -67,6 +78,11 @@ public final class ReservationEntityAssembler {
         entity.setDiscountAmount(terms.discountAmount());
         entity.setBonus(terms.bonus());
         entity.setNegotiationNotes(terms.notes());
+        var document = reservation.getIdentityDocument();
+        entity.setIdentityDocumentId(document == null ? null : document.documentId());
+        entity.setIdentityDocumentContentType(document == null ? null : document.contentType());
+        entity.setIdentityDocumentSizeBytes(document == null ? null : document.sizeBytes());
+        entity.setIdentityDocumentAttachedAt(reservation.getIdentityDocumentAttachedAt());
         copyEvidencesToEntity(reservation, entity);
         var coOwner = reservation.getCoOwner();
         entity.setCoOwnerFullName(coOwner == null ? null : coOwner.fullName());
