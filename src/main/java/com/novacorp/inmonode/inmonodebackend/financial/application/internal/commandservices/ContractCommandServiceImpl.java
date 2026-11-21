@@ -147,19 +147,7 @@ public class ContractCommandServiceImpl implements ContractCommandService {
 
     /** The reservation, when it can get its contract now. */
     private Result<Reservation, ApplicationError> issuable(UUID transactionId) {
-        var reservation = reservationRepository.findBySourceEventId(transactionId).orElse(null);
-        if (reservation == null) {
-            return Result.failure(ApplicationError.notFound("reservation", transactionId.toString()));
-        }
-        var obstacle = Contract.issuingObstacle(reservation);
-        if (obstacle.isPresent()) {
-            return Result.failure(ApplicationError.businessRuleViolation("contract-issuing", obstacle.get()));
-        }
-        if (contractRepository.findByReservationId(Objects.requireNonNull(reservation.getId())).isPresent()) {
-            return Result.failure(ApplicationError.conflict("contract",
-                    "the contract of reservation %s was already issued".formatted(transactionId)));
-        }
-        return Result.success(reservation);
+        return IssuableReservations.find(reservationRepository, contractRepository, transactionId);
     }
 
     private boolean isUploaded(ContractDocument document) {

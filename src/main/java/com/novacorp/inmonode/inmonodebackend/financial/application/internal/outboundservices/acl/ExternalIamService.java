@@ -12,6 +12,7 @@ import java.util.Optional;
 public class ExternalIamService {
 
     private static final String CATALOG_ADMIN = "CATALOG_ADMIN";
+    private static final String FINANCE_ADMIN = "FINANCE_ADMIN";
 
     private final IamContextFacade iamContextFacade;
 
@@ -32,5 +33,10 @@ public class ExternalIamService {
     /** Whether the caller manages the catalog, and may therefore see draft projects. */
     public boolean isCatalogAdmin() {
         return iamContextFacade.currentUserRole().filter(CATALOG_ADMIN::equals).isPresent();
+    }
+
+    /** Whether the caller is the finance back office, which reads every generated contract (US-45). */
+    public boolean isFinanceAdmin() {
+        return iamContextFacade.currentUserRole().filter(FINANCE_ADMIN::equals).isPresent();
     }
 }
