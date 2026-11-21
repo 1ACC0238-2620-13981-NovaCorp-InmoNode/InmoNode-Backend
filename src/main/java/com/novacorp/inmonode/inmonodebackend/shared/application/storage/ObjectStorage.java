@@ -24,6 +24,12 @@ public interface ObjectStorage {
     Optional<StoredObject> describe(String key);
 
     /**
+     * Writes a file the backend produced itself, such as a generated PDF (US-45), under {@code key}. Writing the
+     * same key again replaces it, so a retried generation leaves no orphans.
+     */
+    void store(String key, String contentType, byte[] content);
+
+    /**
      * Signs a {@code GET} of the object under {@code key}, so a client reads it straight from the storage while the
      * bucket stays private. Signing does not check the object exists; the storage answers 404 if it does not.
      *
