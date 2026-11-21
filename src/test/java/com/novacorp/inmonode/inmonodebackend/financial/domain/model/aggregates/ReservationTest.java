@@ -2,6 +2,7 @@ package com.novacorp.inmonode.inmonodebackend.financial.domain.model.aggregates;
 
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.entities.PaymentEvidence;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.FinancingPlan;
+import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.IdentityDocument;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.Money;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.NegotiationTerms;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.PaymentEvidenceSource;
@@ -91,6 +92,40 @@ class ReservationTest {
                 .getNegotiationTerms());
         assertThrows(IllegalArgumentException.class,
                 () -> Reservation.fromFieldSync(3L, 7L, PROSPECT, SOURCE, AMOUNT, RESERVED_AT, null));
+    }
+
+    @Test
+    void aFieldReservationIsPendingItsIdentityDocumentUntilTheAgentAttachesIt() {
+        var reservation = Reservation.fromFieldSync(3L, 7L, PROSPECT, SOURCE, AMOUNT, RESERVED_AT);
+        var photo = new IdentityDocument(SOURCE, UUID.randomUUID(), "image/jpeg", 640_000);
+        var attachedAt = RESERVED_AT.plus(Duration.ofHours(2));
+
+        assertTrue(reservation.isIdentityDocumentPending());
+        assertTrue(reservation.attachIdentityDocument(photo, attachedAt));
+
+        assertFalse(reservation.isIdentityDocumentPending());
+        assertEquals(photo, reservation.getIdentityDocument());
+        assertEquals(attachedAt, reservation.getIdentityDocumentAttachedAt());
+        assertFalse(reservation.attachIdentityDocument(photo, attachedAt.plusSeconds(60)),
+                "a re-sent registration changes nothing");
+        assertEquals(attachedAt, reservation.getIdentityDocumentAttachedAt());
+    }
+
+    @Test
+    void aReservationKeepsTheFirstIdentityDocumentAndOnlyAFieldOneGetsIt() {
+        var reservation = Reservation.fromFieldSync(3L, 7L, PROSPECT, SOURCE, AMOUNT, RESERVED_AT);
+        reservation.attachIdentityDocument(new IdentityDocument(SOURCE, UUID.randomUUID(), "image/jpeg", 1000),
+                RESERVED_AT);
+        var web = Reservation.fromWebRequest(3L, 41L, SOURCE, AMOUNT, PLAN, RESERVED_AT);
+
+        assertThrows(IllegalStateException.class, () -> reservation.attachIdentityDocument(
+                new IdentityDocument(SOURCE, UUID.randomUUID(), "image/jpeg", 1000), RESERVED_AT));
+        assertThrows(IllegalStateException.class, () -> Reservation.fromFieldSync(3L, 7L, PROSPECT, SOURCE, AMOUNT,
+                RESERVED_AT).attachIdentityDocument(new IdentityDocument(UUID.randomUUID(), UUID.randomUUID(),
+                "image/jpeg", 1000), RESERVED_AT), "a photo of another reservation");
+        assertFalse(web.isIdentityDocumentPending(), "the web portal does not ask for it");
+        assertThrows(IllegalStateException.class, () -> web.attachIdentityDocument(
+                new IdentityDocument(SOURCE, UUID.randomUUID(), "image/jpeg", 1000), RESERVED_AT));
     }
 
     @Test
