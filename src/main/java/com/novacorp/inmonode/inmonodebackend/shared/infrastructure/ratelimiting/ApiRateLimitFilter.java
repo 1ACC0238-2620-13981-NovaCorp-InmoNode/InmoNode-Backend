@@ -42,8 +42,10 @@ public class ApiRateLimitFilter extends OncePerRequestFilter {
 
     private static IpRateLimiter.Category category(HttpServletRequest request) {
         var path = path(request);
+        // A background PDF request (US-45) costs a rendering like a download; reading its status does not.
         if (path.endsWith("/download") || path.endsWith("/download-url") || path.endsWith(".pdf")
-                || path.endsWith("/no-debt-certificate")) {
+                || path.endsWith("/no-debt-certificate")
+                || ("POST".equals(request.getMethod()) && path.endsWith("/document-requests"))) {
             return IpRateLimiter.Category.PDF;
         }
         if ("GET".equals(request.getMethod()) && (path.equals("/api/v1/projects")
