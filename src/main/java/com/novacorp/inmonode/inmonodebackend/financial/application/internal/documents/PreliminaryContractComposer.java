@@ -1,22 +1,17 @@
 package com.novacorp.inmonode.inmonodebackend.financial.application.internal.documents;
 
-import com.novacorp.inmonode.inmonodebackend.financial.domain.model.aggregates.AccountStatement;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.aggregates.Lot;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.aggregates.Project;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.aggregates.Reservation;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.DocumentContent;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.Money;
+import com.novacorp.inmonode.inmonodebackend.shared.application.documents.DocumentFormats;
 import org.jspecify.annotations.Nullable;
 
 import java.math.BigDecimal;
-import java.math.RoundingMode;
-import java.text.DecimalFormat;
-import java.text.DecimalFormatSymbols;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
-import java.util.Locale;
 
 /**
  * Writes the preliminary purchase contract of a verified web reservation (US-21) from the server's own data, for the
@@ -27,7 +22,6 @@ import java.util.Locale;
 public final class PreliminaryContractComposer {
 
     public static final String TITLE = "Contrato preliminar de compraventa";
-    private static final DateTimeFormatter DATE = DateTimeFormatter.ofPattern("dd/MM/yyyy");
 
     private PreliminaryContractComposer() {
     }
@@ -44,7 +38,7 @@ public final class PreliminaryContractComposer {
                 : new Money(price.amount().subtract(terms.discountAmount()), price.currency());
         var lines = new ArrayList<String>();
         lines.add("Separación: " + reservation.getSourceEventId());
-        lines.add("Generado el " + DATE.format(today) + ".");
+        lines.add("Generado el " + DocumentFormats.date(today) + ".");
         lines.add("");
         lines.add("PARTES");
         var buyer = buyerEmail == null ? "el comprador de esta separación" : "el titular de la cuenta " + buyerEmail
@@ -103,23 +97,15 @@ public final class PreliminaryContractComposer {
         return new DocumentContent(TITLE, lines);
     }
 
-    /** "S/ 45,000.00", "US$ 1,200.00"; other currencies keep their code. */
-    static String money(Money money) {
-        var symbol = switch (money.currency().toUpperCase(Locale.ROOT)) {
-            case "PEN" -> "S/";
-            case "USD" -> "US$";
-            default -> money.currency();
-        };
-        var format = new DecimalFormat("#,##0.00", DecimalFormatSymbols.getInstance(Locale.US));
-        format.setRoundingMode(RoundingMode.DOWN);
-        return symbol + " " + format.format(money.amount());
+    private static String money(Money money) {
+        return DocumentFormats.money(money.amount(), money.currency());
     }
 
     private static String number(BigDecimal value) {
-        return value.stripTrailingZeros().toPlainString();
+        return DocumentFormats.number(value);
     }
 
     private static String date(@Nullable Instant instant) {
-        return instant == null ? "-" : DATE.format(LocalDate.ofInstant(instant, AccountStatement.SALES_ZONE));
+        return instant == null ? "-" : DocumentFormats.date(instant);
     }
 }
