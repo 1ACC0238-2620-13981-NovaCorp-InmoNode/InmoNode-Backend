@@ -8,17 +8,23 @@ import com.novacorp.inmonode.inmonodebackend.financial.domain.model.queries.GetP
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.queries.GetPublishedLotQuery;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.queries.GetPublishedProjectsQuery;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.LotStatistics;
+import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.ProjectDetail;
+import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.ProjectDetail.GalleryImage;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.ProjectSummary;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.PublishedLot;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.repositories.LotRepository;
+import com.novacorp.inmonode.inmonodebackend.financial.domain.repositories.ProjectImageRepository;
+import com.novacorp.inmonode.inmonodebackend.financial.domain.repositories.ProjectImageRepository.RegisteredImage;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.repositories.ProjectRepository;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.services.ProjectQueryService;
 import com.novacorp.inmonode.inmonodebackend.shared.application.result.ApplicationError;
 import com.novacorp.inmonode.inmonodebackend.shared.application.result.Result;
+import com.novacorp.inmonode.inmonodebackend.shared.application.storage.ObjectStorage;
 import org.springframework.stereotype.Service;
 import com.novacorp.inmonode.inmonodebackend.financial.application.catalog.CatalogReadCache;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -26,15 +32,23 @@ import java.util.Optional;
 @Service
 public class ProjectQueryServiceImpl implements ProjectQueryService {
 
+    /** The buyer browses the gallery while the page stays open, so its links last longer than a download's. */
+    static final Duration GALLERY_URL_VALIDITY = Duration.ofHours(1);
+
     private final ProjectRepository projectRepository;
     private final LotRepository lotRepository;
+    private final ProjectImageRepository projectImageRepository;
+    private final ObjectStorage objectStorage;
     private final ExternalIamService externalIamService;
     private final CatalogReadCache cache;
 
     public ProjectQueryServiceImpl(ProjectRepository projectRepository, LotRepository lotRepository,
+                                   ProjectImageRepository projectImageRepository, ObjectStorage objectStorage,
                                    ExternalIamService externalIamService, CatalogReadCache cache) {
         this.projectRepository = projectRepository;
         this.lotRepository = lotRepository;
+        this.projectImageRepository = projectImageRepository;
+        this.objectStorage = objectStorage;
         this.externalIamService = externalIamService;
         this.cache = cache;
     }
@@ -55,8 +69,22 @@ public class ProjectQueryServiceImpl implements ProjectQueryService {
     }
 
     @Override
-    public Result<Project, ApplicationError> handle(GetProjectByIdQuery query) {
-        return visibleProject(query.projectId());
+    public Result<ProjectDetail, ApplicationError> handle(GetProjectByIdQuery query) {
+        return visibleProject(query.projectId()).map(project -> new ProjectDetail(project, gallery(project)));
+    }
+
+    /**
+     * The links are signed on every read and never cached, so they are always valid for the whole
+     * {@link #GALLERY_URL_VALIDITY}; signing needs no call to the storage.
+     */
+    private List<GalleryImage> gallery(Project project) {
+        return projectImageRepository.findByProjectId(project.getId()).stream()
+                .map(RegisteredImage::image)
+                .map(image -> {
+                    var link = objectStorage.presignDownload(image.objectKey(), GALLERY_URL_VALIDITY);
+                    return new GalleryImage(image, link.url(), link.expiresAt());
+                })
+                .toList();
     }
 
     @Override

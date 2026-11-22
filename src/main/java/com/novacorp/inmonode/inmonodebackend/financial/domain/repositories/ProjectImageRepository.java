@@ -18,7 +18,7 @@ public interface ProjectImageRepository {
     /** The image registered with this id, in any project. */
     Optional<RegisteredImage> findByImageId(UUID imageId);
 
-    /** The images of a project in the order they were registered, the first one being its cover. */
+    /** The images of a project in the order they were registered. */
     List<RegisteredImage> findByProjectId(Long projectId);
 
     record RegisteredImage(ProjectImage image, Instant registeredAt) {

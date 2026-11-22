@@ -1,6 +1,7 @@
 -- US-57: photos and renders of a project for the gallery of its page. The catalog admin uploads each file straight
 -- to the file repository (US-33) with a presigned URL and registers it here; object_key is where it lives there.
--- JPEG or PNG up to 5 MB, like the identity documents. The first image registered is the cover of the project.
+-- JPEG or PNG up to 5 MB, like the identity documents. The page of the project shows them in the order they were
+-- registered.
 CREATE TABLE financial_document_control.project_images (
     id            BIGSERIAL PRIMARY KEY,
     project_id    BIGINT       NOT NULL REFERENCES financial_document_control.projects (id),

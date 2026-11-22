@@ -33,14 +33,17 @@ import java.time.Instant;
 import java.util.UUID;
 
 import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.hasSize;
 import static org.junit.jupiter.api.Assertions.*;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * The back office uploads the photos and renders of a project (US-57) and registers them in its gallery, against a
- * real PostgreSQL and a real S3-compatible storage. Each test uses its own project.
+ * The back office uploads the photos and renders of a project (US-57) and registers them in its gallery, which the
+ * page of the project shows, against a real PostgreSQL and a real S3-compatible storage. Each test uses its own
+ * project.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -214,6 +217,65 @@ class ProjectImageUploadIntegrationTest {
                 .andExpect(status().isUnauthorized());
     }
 
+    @Test
+    void thePageOfAPublishedProjectShowsItsGalleryToEveryone() throws Exception {
+        var project = publishedProject();
+        mockMvc.perform(get("/api/v1/projects/{id}", project))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.images", hasSize(0)));
+        var first = UUID.randomUUID();
+        var second = UUID.randomUUID();
+        uploadAndRegister(project, first, "image/png");
+        uploadAndRegister(project, second, "image/jpeg");
+        var before = Instant.now();
+
+        var page = mockMvc.perform(get("/api/v1/projects/{id}", project))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.images", hasSize(2)))
+                .andExpect(jsonPath("$.images[0].imageId").value(first.toString()))
+                .andExpect(jsonPath("$.images[0].contentType").value("image/png"))
+                .andExpect(jsonPath("$.images[1].imageId").value(second.toString()))
+                .andExpect(jsonPath("$.images[1].contentType").value("image/jpeg"))
+                .andReturn().getResponse().getContentAsString();
+
+        var expiresAt = Instant.parse(JsonPath.read(page, "$.images[0].expiresAt"));
+        assertTrue(expiresAt.isAfter(before.plus(Duration.ofMinutes(59))), "valid for 1 hour");
+        assertTrue(expiresAt.isBefore(before.plus(Duration.ofMinutes(61))), "valid for 1 hour");
+        var download = http.send(HttpRequest.newBuilder(URI.create(JsonPath.read(page, "$.images[1].url"))).GET()
+                .build(), HttpResponse.BodyHandlers.ofByteArray());
+        assertEquals(200, download.statusCode());
+        assertEquals(2048, download.body().length);
+    }
+
+    @Test
+    void theGalleryOfADraftIsSeenOnlyByTheCatalogAdmin() throws Exception {
+        var project = project();
+        var image = UUID.randomUUID();
+        uploadAndRegister(project, image, "image/jpeg");
+
+        mockMvc.perform(get("/api/v1/projects/{id}", project))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(get("/api/v1/projects/{id}", project)
+                        .header(HttpHeaders.AUTHORIZATION, bearer(Role.CATALOG_ADMIN)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.images", hasSize(1)))
+                .andExpect(jsonPath("$.images[0].imageId").value(image.toString()));
+    }
+
+    @Test
+    void theWritesOfTheBackOfficeAnswerTheProjectWithoutItsGallery() throws Exception {
+        mockMvc.perform(post("/api/v1/projects")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(Role.CATALOG_ADMIN))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"name": "Galería", "location": "Asia",
+                                 "financingRules": {"minDownPaymentPercentage": 20, "annualInterestRate": 12,
+                                                    "maxTermMonths": 120, "lateFeeRate": 1}}"""))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.name").value("Galería"))
+                .andExpect(jsonPath("$.images").doesNotExist());
+    }
+
     private void uploadAndRegister(long project, UUID image, String contentType) throws Exception {
         var answer = call(project, "/upload-url", image, contentType, 2048)
                 .andExpect(status().isOk())
@@ -260,6 +322,13 @@ class ProjectImageUploadIntegrationTest {
     private long project() {
         var rules = new FinancingRules(new BigDecimal("20"), new BigDecimal("12"), 120, BigDecimal.ONE);
         return projectRepository.save(Project.create("Galería", "Asia", null, null, rules)).getId();
+    }
+
+    private long publishedProject() {
+        var rules = new FinancingRules(new BigDecimal("20"), new BigDecimal("12"), 120, BigDecimal.ONE);
+        var project = Project.create("Galería publicada", "Asia", null, null, rules);
+        project.publish(1);
+        return projectRepository.save(project).getId();
     }
 
     private String bearer(Role role) {
