@@ -3,9 +3,6 @@ package com.novacorp.inmonode.inmonodebackend.vouchers.interfaces.rest;
 import com.novacorp.inmonode.inmonodebackend.shared.interfaces.rest.transform.ResponseEntityAssembler;
 import com.novacorp.inmonode.inmonodebackend.shared.domain.model.valueobjects.PageRequest;
 import com.novacorp.inmonode.inmonodebackend.shared.domain.model.valueobjects.PageResult;
-import com.novacorp.inmonode.inmonodebackend.shared.application.result.Result;
-import com.novacorp.inmonode.inmonodebackend.shared.application.result.ApplicationError;
-import com.novacorp.inmonode.inmonodebackend.vouchers.domain.model.aggregates.Voucher;
 import com.novacorp.inmonode.inmonodebackend.vouchers.domain.model.queries.GetMyVouchersQuery;
 import com.novacorp.inmonode.inmonodebackend.vouchers.domain.services.VoucherQueryService;
 import com.novacorp.inmonode.inmonodebackend.vouchers.interfaces.rest.transform.VoucherPageResourceAssembler;
@@ -53,15 +50,8 @@ public class VouchersController {
     public ResponseEntity<?> getMyVouchers(@RequestParam(defaultValue = "1") int page,
                                            @RequestParam(defaultValue = "20") int limit) {
         var result = voucherQueryService.handle(new GetMyVouchersQuery(new PageRequest(page, limit)));
-        var response = ResponseEntityAssembler.toResponseEntityFromResult(
-                result, VoucherPageResourceAssembler::toResourceFromPage, HttpStatus.OK);
-        if (result instanceof Result.Success<PageResult<Voucher>, ApplicationError> success) {
-            return ResponseEntity.status(response.getStatusCode())
-                    .header("Total-Count", Long.toString(success.value().totalCount()))
-                    .header("Cache-Control", "no-store")
-                    .body(response.getBody());
-        }
-        return response;
+        return ResponseEntityAssembler.toPageResponseEntityFromResult(
+                result, VoucherPageResourceAssembler::toResourceFromPage, PageResult::totalCount);
     }
 
     @PostMapping("/upload-url")
