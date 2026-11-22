@@ -2,12 +2,20 @@ package com.novacorp.inmonode.inmonodebackend.financial.interfaces.rest.transfor
 
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.PendingVerification;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.VerificationOutcome;
+import com.novacorp.inmonode.inmonodebackend.financial.interfaces.rest.resources.PendingVerificationPageResource;
 import com.novacorp.inmonode.inmonodebackend.financial.interfaces.rest.resources.PendingVerificationResource;
 import com.novacorp.inmonode.inmonodebackend.financial.interfaces.rest.resources.VerificationDecisionResource;
+import com.novacorp.inmonode.inmonodebackend.shared.domain.model.valueobjects.PageResult;
 
 public final class VerificationResourceAssembler {
 
     private VerificationResourceAssembler() {}
+
+    public static PendingVerificationPageResource toResourceFromPage(PageResult<PendingVerification> page) {
+        return new PendingVerificationPageResource(
+                page.items().stream().map(VerificationResourceAssembler::toResourceFromPending).toList(),
+                page.totalCount(), page.page(), page.limit());
+    }
 
     public static PendingVerificationResource toResourceFromPending(PendingVerification pending) {
         var evidence = pending.evidence();

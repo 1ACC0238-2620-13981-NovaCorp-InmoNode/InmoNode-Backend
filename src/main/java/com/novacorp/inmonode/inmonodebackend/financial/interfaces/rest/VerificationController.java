@@ -6,9 +6,10 @@ import com.novacorp.inmonode.inmonodebackend.financial.domain.model.queries.GetP
 import com.novacorp.inmonode.inmonodebackend.financial.domain.services.VerificationCommandService;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.services.VerificationQueryService;
 import com.novacorp.inmonode.inmonodebackend.financial.interfaces.rest.resources.ApprovePaymentEvidenceResource;
-import com.novacorp.inmonode.inmonodebackend.financial.interfaces.rest.resources.PendingVerificationResource;
+import com.novacorp.inmonode.inmonodebackend.financial.interfaces.rest.resources.PendingVerificationPageResource;
 import com.novacorp.inmonode.inmonodebackend.financial.interfaces.rest.resources.RejectPaymentEvidenceResource;
 import com.novacorp.inmonode.inmonodebackend.financial.interfaces.rest.transform.VerificationResourceAssembler;
+import com.novacorp.inmonode.inmonodebackend.shared.domain.model.valueobjects.PageRequest;
 import com.novacorp.inmonode.inmonodebackend.shared.interfaces.rest.transform.ResponseEntityAssembler;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -21,9 +22,8 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-
-import java.util.List;
 
 @RestController
 @RequestMapping("/api/v1/verifications")
@@ -41,17 +41,21 @@ public class VerificationController {
 
     @GetMapping("/pending")
     @PreAuthorize("hasRole('FINANCE_ADMIN')")
-    @Operation(summary = "Get the verification queue",
-            description = "Finance back office only (FINANCE_ADMIN). Every payment evidence waiting for a decision, "
-                    + "oldest first, with its reservation and lot. Late ones (received after the reservation stopped "
-                    + "holding its lot) are listed so they can be rejected. A field reservation whose agent has not "
-                    + "attached the photo of the buyer's identity document yet shows identityDocumentPending "
-                    + "(\"Documento de identidad pendiente\", US-59); once attached, identityDocumentUrl links to it "
-                    + "for 10 minutes.")
-    public List<PendingVerificationResource> getPending() {
-        return verificationQueryService.handle(new GetPendingVerificationsQuery()).stream()
-                .map(VerificationResourceAssembler::toResourceFromPending)
-                .toList();
+    @Operation(summary = "Get the verification queue with database pagination (US-46)",
+            description = "Finance back office only (FINANCE_ADMIN). The payment evidences waiting for a decision, "
+                    + "oldest submittedAt first with an evidenceId tie-breaker, each with its reservation and lot. "
+                    + "Pages work as in GET /vouchers: page starts at 1; limit defaults to 20 and is capped at 100; "
+                    + "non-positive values return 400; totalCount and the Total-Count header count every pending "
+                    + "evidence; a page past the end returns 200 with no items. Late ones (received after the "
+                    + "reservation stopped holding its lot) are listed so they can be rejected. A field reservation "
+                    + "whose agent has not attached the photo of the buyer's identity document yet shows "
+                    + "identityDocumentPending (\"Documento de identidad pendiente\", US-59); once attached, "
+                    + "identityDocumentUrl links to it for 10 minutes.")
+    public ResponseEntity<PendingVerificationPageResource> getPending(@RequestParam(defaultValue = "1") int page,
+                                                                      @RequestParam(defaultValue = "20") int limit) {
+        var pending = verificationQueryService.handle(new GetPendingVerificationsQuery(new PageRequest(page, limit)));
+        return ResponseEntityAssembler.toPageResponseEntity(VerificationResourceAssembler.toResourceFromPage(pending),
+                pending.totalCount());
     }
 
     @PostMapping("/{evidenceId}/approve")
