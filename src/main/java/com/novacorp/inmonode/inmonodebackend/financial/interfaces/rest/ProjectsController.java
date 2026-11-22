@@ -54,13 +54,16 @@ public class ProjectsController {
 
     @GetMapping("/{projectId}")
     @OptionalAuthentication
-    @Operation(summary = "Get a project with its financing rules (US-15)",
+    @Operation(summary = "Get a project with its financing rules and its gallery (US-15, US-57)",
             description = "Public for published projects; the token is optional. A draft is visible only to "
-                    + "CATALOG_ADMIN (404 otherwise).")
+                    + "CATALOG_ADMIN (404 otherwise). images lists the photos and renders of the project in the "
+                    + "order they were registered, each with a presigned link valid for 1 hour (url, until "
+                    + "expiresAt); it is empty when the project has no images yet, so the page shows its fallback "
+                    + "image.")
     public ResponseEntity<?> getById(@PathVariable Long projectId) {
         var result = projectQueryService.handle(new GetProjectByIdQuery(projectId));
         return ResponseEntityAssembler.toResponseEntityFromResult(
-                result, ProjectResourceAssembler::toResourceFromEntity, HttpStatus.OK);
+                result, ProjectResourceAssembler::toResourceFromDetail, HttpStatus.OK);
     }
 
     @PostMapping

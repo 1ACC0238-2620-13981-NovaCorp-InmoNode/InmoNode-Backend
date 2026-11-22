@@ -1,11 +1,11 @@
 package com.novacorp.inmonode.inmonodebackend.financial.domain.services;
 
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.aggregates.Lot;
-import com.novacorp.inmonode.inmonodebackend.financial.domain.model.aggregates.Project;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.queries.GetProjectByIdQuery;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.queries.GetProjectLotsQuery;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.queries.GetPublishedLotQuery;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.queries.GetPublishedProjectsQuery;
+import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.ProjectDetail;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.ProjectSummary;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.PublishedLot;
 import com.novacorp.inmonode.inmonodebackend.shared.application.result.ApplicationError;
@@ -24,7 +24,8 @@ public interface ProjectQueryService {
     /** US-15: published projects with their price range and availability, ordered by name. */
     List<ProjectSummary> handle(GetPublishedProjectsQuery query);
 
-    Result<Project, ApplicationError> handle(GetProjectByIdQuery query);
+    /** US-15, US-57: a visible project with its gallery, each image with a fresh presigned link. */
+    Result<ProjectDetail, ApplicationError> handle(GetProjectByIdQuery query);
 
     /** US-05, US-15: lots of a visible project, ordered by code. */
     Result<List<Lot>, ApplicationError> handle(GetProjectLotsQuery query);
