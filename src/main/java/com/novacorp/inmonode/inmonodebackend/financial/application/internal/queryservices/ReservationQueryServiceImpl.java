@@ -16,6 +16,7 @@ import com.novacorp.inmonode.inmonodebackend.financial.domain.services.Reservati
 import com.novacorp.inmonode.inmonodebackend.shared.application.result.ApplicationError;
 import com.novacorp.inmonode.inmonodebackend.shared.application.result.Result;
 import com.novacorp.inmonode.inmonodebackend.shared.application.storage.ObjectStorage;
+import com.novacorp.inmonode.inmonodebackend.shared.domain.model.valueobjects.PageResult;
 import org.jspecify.annotations.Nullable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -57,11 +58,18 @@ public class ReservationQueryServiceImpl implements ReservationQueryService {
         if (reservation == null) {
             return Result.failure(ApplicationError.notFound("reservation", query.transactionId().toString()));
         }
-        var evidences = reservation.getEvidences().stream()
-                .sorted(Comparator.comparing(PaymentEvidence::getSubmittedAt))
+        // The evidences come with their reservation (a few per reservation): the page is cut before the download
+        // links are signed, so only the evidences of the page get one.
+        var pagination = query.pagination();
+        var evidences = reservation.getEvidences();
+        var page = evidences.stream()
+                .sorted(Comparator.comparing(PaymentEvidence::getSubmittedAt).thenComparing(PaymentEvidence::getId))
+                .skip((long) (pagination.page() - 1) * pagination.limit())
+                .limit(pagination.limit())
                 .map(this::toView)
                 .toList();
-        return Result.success(new ReservationPayments(reservation, waitingUntil(reservation), evidences));
+        return Result.success(new ReservationPayments(reservation, waitingUntil(reservation),
+                new PageResult<>(page, evidences.size(), pagination.page(), pagination.limit())));
     }
 
     /** Only an approved evidence can be downloaded: it is the buyer's legal proof of the payment. */

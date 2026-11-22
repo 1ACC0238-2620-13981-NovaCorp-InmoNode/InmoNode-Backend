@@ -2,7 +2,6 @@ package com.novacorp.inmonode.inmonodebackend.financial.application.internal.que
 
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.aggregates.Lot;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.aggregates.Reservation;
-import com.novacorp.inmonode.inmonodebackend.financial.domain.model.entities.PaymentEvidence;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.queries.GetPendingVerificationsQuery;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.PendingVerification;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.repositories.LotRepository;
@@ -10,14 +9,14 @@ import com.novacorp.inmonode.inmonodebackend.financial.domain.repositories.Reser
 import com.novacorp.inmonode.inmonodebackend.financial.domain.services.VerificationQueryService;
 import com.novacorp.inmonode.inmonodebackend.shared.application.storage.ObjectStorage;
 import com.novacorp.inmonode.inmonodebackend.shared.application.storage.ObjectStorage.PresignedDownload;
+import com.novacorp.inmonode.inmonodebackend.shared.domain.model.valueobjects.PageResult;
 import org.jspecify.annotations.Nullable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
-import java.util.Comparator;
 import java.util.HashMap;
-import java.util.List;
+import java.util.Optional;
 
 @Service
 @Transactional(readOnly = true)
@@ -38,20 +37,21 @@ public class VerificationQueryServiceImpl implements VerificationQueryService {
     }
 
     @Override
-    public List<PendingVerification> handle(GetPendingVerificationsQuery query) {
+    public PageResult<PendingVerification> handle(GetPendingVerificationsQuery query) {
+        var page = reservationRepository.findPendingEvidences(query.pagination());
         var lots = new HashMap<Long, Lot>();
-        return reservationRepository.findWithPendingEvidence().stream()
-                .flatMap(reservation -> {
-                    var identityDocument = identityDocumentLink(reservation);
-                    return reservation.getEvidences().stream()
-                            .filter(PaymentEvidence::isPending)
-                            .map(evidence -> new PendingVerification(evidence, reservation,
-                                    lots.computeIfAbsent(reservation.getLotId(),
-                                            lotId -> lotRepository.findById(lotId).orElseThrow()),
-                                    identityDocument));
+        var identityDocuments = new HashMap<Long, Optional<PresignedDownload>>();
+        var items = page.items().stream()
+                .map(found -> {
+                    var reservation = found.reservation();
+                    return new PendingVerification(found.evidence(), reservation,
+                            lots.computeIfAbsent(reservation.getLotId(),
+                                    lotId -> lotRepository.findById(lotId).orElseThrow()),
+                            identityDocuments.computeIfAbsent(reservation.getId(),
+                                    id -> Optional.ofNullable(identityDocumentLink(reservation))).orElse(null));
                 })
-                .sorted(Comparator.comparing(pending -> pending.evidence().getSubmittedAt()))
                 .toList();
+        return new PageResult<>(items, page.totalCount(), page.page(), page.limit());
     }
 
     /** The reviewer compares the photo with the buyer's data before approving the payment (US-59). */

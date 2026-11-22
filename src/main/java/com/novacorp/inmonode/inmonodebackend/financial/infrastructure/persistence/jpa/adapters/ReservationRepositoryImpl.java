@@ -2,13 +2,17 @@ package com.novacorp.inmonode.inmonodebackend.financial.infrastructure.persisten
 
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.aggregates.Reservation;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.PaymentEvidenceStatus;
+import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.ReservationEvidence;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.repositories.ReservationRepository;
 import com.novacorp.inmonode.inmonodebackend.financial.infrastructure.persistence.jpa.assemblers.ReservationEntityAssembler;
 import com.novacorp.inmonode.inmonodebackend.financial.infrastructure.persistence.jpa.entities.ReservationEntity;
 import com.novacorp.inmonode.inmonodebackend.financial.infrastructure.persistence.jpa.repositories.ReservationJpaRepository;
+import com.novacorp.inmonode.inmonodebackend.shared.domain.model.valueobjects.PageRequest;
+import com.novacorp.inmonode.inmonodebackend.shared.domain.model.valueobjects.PageResult;
 import org.springframework.stereotype.Repository;
 
-import java.util.List;
+import java.util.HashMap;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -61,9 +65,21 @@ public class ReservationRepositoryImpl implements ReservationRepository {
     }
 
     @Override
-    public List<Reservation> findWithPendingEvidence() {
-        return jpaRepository.findWithEvidenceInStatus(PaymentEvidenceStatus.PENDING).stream()
-                .map(ReservationEntityAssembler::toDomain)
+    public PageResult<ReservationEvidence> findPendingEvidences(PageRequest pagination) {
+        var ids = jpaRepository.findEvidenceIdsInStatus(PaymentEvidenceStatus.PENDING,
+                org.springframework.data.domain.PageRequest.of(pagination.page() - 1, pagination.limit()));
+        var byEvidenceId = new HashMap<Long, ReservationEvidence>();
+        if (ids.hasContent()) {
+            for (var entity : jpaRepository.findByEvidenceIds(ids.getContent())) {
+                var reservation = ReservationEntityAssembler.toDomain(entity);
+                reservation.getEvidences().forEach(evidence ->
+                        byEvidenceId.put(evidence.getId(), new ReservationEvidence(reservation, evidence)));
+            }
+        }
+        var items = ids.getContent().stream()
+                .map(byEvidenceId::get)
+                .filter(Objects::nonNull)
                 .toList();
+        return new PageResult<>(items, ids.getTotalElements(), pagination.page(), pagination.limit());
     }
 }

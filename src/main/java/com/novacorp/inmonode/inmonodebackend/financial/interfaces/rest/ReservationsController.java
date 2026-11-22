@@ -6,6 +6,7 @@ import com.novacorp.inmonode.inmonodebackend.financial.domain.services.AccountSt
 import com.novacorp.inmonode.inmonodebackend.financial.domain.services.ReservationQueryService;
 import com.novacorp.inmonode.inmonodebackend.financial.interfaces.rest.transform.AccountStatementResourceAssembler;
 import com.novacorp.inmonode.inmonodebackend.financial.interfaces.rest.transform.ReservationPaymentsResourceAssembler;
+import com.novacorp.inmonode.inmonodebackend.shared.domain.model.valueobjects.PageRequest;
 import com.novacorp.inmonode.inmonodebackend.shared.interfaces.rest.transform.ResponseEntityAssembler;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -15,6 +16,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.UUID;
@@ -57,11 +59,18 @@ public class ReservationsController {
             description = "The buyer (web) or the agent (field) who made the reservation. Approved evidences come "
                     + "with a link to download the voucher, valid for 10 minutes; rejected ones with the reason. "
                     + "After a rejection the reservation is REJECTED until waitingUntil: send a substitute "
-                    + "voucher with the voucher endpoints and the same reservationId. A reservation that is unknown "
+                    + "voucher with the voucher endpoints and the same reservationId. The evidences come in pages "
+                    + "like GET /vouchers (US-46): oldest submittedAt first with an id tie-breaker; page starts at 1; "
+                    + "limit defaults to 20 and is capped at 100; non-positive values return 400; totalCount and the "
+                    + "Total-Count header count every evidence of the reservation. A reservation that is unknown "
                     + "or belongs to someone else answers 404 RESERVATION_NOT_FOUND.")
-    public ResponseEntity<?> getPaymentEvidences(@PathVariable UUID transactionId) {
-        var result = reservationQueryService.handle(new GetReservationPaymentsQuery(transactionId));
-        return ResponseEntityAssembler.toResponseEntityFromResult(
-                result, ReservationPaymentsResourceAssembler::toResourceFromPayments, HttpStatus.OK);
+    public ResponseEntity<?> getPaymentEvidences(@PathVariable UUID transactionId,
+                                                 @RequestParam(defaultValue = "1") int page,
+                                                 @RequestParam(defaultValue = "20") int limit) {
+        var result = reservationQueryService.handle(
+                new GetReservationPaymentsQuery(transactionId, new PageRequest(page, limit)));
+        return ResponseEntityAssembler.toPageResponseEntityFromResult(
+                result, ReservationPaymentsResourceAssembler::toResourceFromPayments,
+                payments -> payments.evidences().totalCount());
     }
 }
