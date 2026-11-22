@@ -2,22 +2,24 @@ package com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobject
 
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.aggregates.Reservation;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.entities.PaymentEvidence;
+import com.novacorp.inmonode.inmonodebackend.shared.domain.model.valueobjects.PageResult;
 import org.jspecify.annotations.Nullable;
 
 import java.net.URI;
 import java.time.Instant;
-import java.util.List;
+import java.util.Objects;
 
 /**
- * A reservation with its payment evidences, as its requester sees them (US-25).
+ * A reservation with one page of its payment evidences, as its requester sees them (US-25, US-46).
  *
  * @param waitingUntil until when the lot waits for a (substitute) voucher; {@code null} when it does not wait
+ * @param evidences    the requested page, oldest first, and the count of every evidence of the reservation
  */
 public record ReservationPayments(Reservation reservation, @Nullable Instant waitingUntil,
-                                  List<EvidenceView> evidences) {
+                                  PageResult<EvidenceView> evidences) {
 
     public ReservationPayments {
-        evidences = List.copyOf(evidences);
+        Objects.requireNonNull(evidences, "evidences");
     }
 
     /**

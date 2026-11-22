@@ -7,16 +7,20 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * A reservation with its payment evidences, for the person who made it (US-25).
+ * A reservation with one page of its payment evidences, for the person who made it (US-25, US-46).
  *
  * @param status        BLOCKED (waiting for a voucher), PENDING_VERIFICATION, REJECTED (waiting for a substitute),
  *                      VERIFIED, EXPIRED...
  * @param initialAmount the down payment the voucher must cover, in {@code currency}
  * @param waitingUntil  a voucher (or a substitute for a rejected one) must arrive before this instant
+ * @param evidences     the page of evidences, oldest first
+ * @param totalCount    every evidence of the reservation, also sent in the {@code Total-Count} header
+ * @param page          the page returned, starting at 1
+ * @param limit         the page size applied, at most 100
  */
 public record ReservationPaymentsResource(UUID transactionId, String channel, String status,
                                           BigDecimal initialAmount, String currency, Instant waitingUntil,
-                                          List<EvidenceResource> evidences) {
+                                          List<EvidenceResource> evidences, long totalCount, int page, int limit) {
 
     /**
      * @param status            PENDING, APPROVED or REJECTED

@@ -1,8 +1,10 @@
 package com.novacorp.inmonode.inmonodebackend.financial.domain.repositories;
 
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.aggregates.Reservation;
+import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.ReservationEvidence;
+import com.novacorp.inmonode.inmonodebackend.shared.domain.model.valueobjects.PageRequest;
+import com.novacorp.inmonode.inmonodebackend.shared.domain.model.valueobjects.PageResult;
 
-import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -27,6 +29,10 @@ public interface ReservationRepository {
     /** The reservation one of whose payment evidences has this id. */
     Optional<Reservation> findByEvidenceId(Long evidenceId);
 
-    /** Reservations with at least one evidence waiting for the back office's decision. */
-    List<Reservation> findWithPendingEvidence();
+    /**
+     * One page of the evidences waiting for the back office's decision, oldest first with an id tie-breaker, each
+     * with its reservation (US-46). The database reads only that page of evidences, the reservations they belong to
+     * and the count of every pending evidence.
+     */
+    PageResult<ReservationEvidence> findPendingEvidences(PageRequest pagination);
 }

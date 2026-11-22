@@ -38,12 +38,14 @@ import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
 
+import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.notNullValue;
 import static org.hamcrest.Matchers.nullValue;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -120,6 +122,49 @@ class PaymentHistoryIntegrationTest {
     }
 
     @Test
+    void theEvidencesOfAReservationComeInPagesLikeTheVouchers() throws Exception {
+        var buyer = BUYERS.incrementAndGet();
+        var transactionId = separate(buyer, lot());
+        sendVoucher(buyer, UUID.randomUUID(), transactionId, new byte[2048]).andExpect(status().isCreated());
+        var rejectedId = evidenceIdAt(history(buyer, transactionId), 0);
+        decide(rejectedId, "reject", "{\"reason\": \"Voucher ilegible\"}").andExpect(status().isOk());
+        var legible = new byte[3072];
+        legible[0] = 7;
+        sendVoucher(buyer, UUID.randomUUID(), transactionId, legible).andExpect(status().isCreated());
+        var substituteId = evidenceIdAt(history(buyer, transactionId), 1);
+        decide(substituteId, "approve", "{\"note\": \"Conciliado\"}").andExpect(status().isOk());
+
+        historyPage(buyer, transactionId, 1, 1)
+                .andExpect(status().isOk())
+                .andExpect(header().string("Total-Count", "2"))
+                .andExpect(header().string("Cache-Control", containsString("no-store")))
+                .andExpect(jsonPath("$.status").value("VERIFIED"))
+                .andExpect(jsonPath("$.totalCount").value(2))
+                .andExpect(jsonPath("$.page").value(1))
+                .andExpect(jsonPath("$.limit").value(1))
+                .andExpect(jsonPath("$.evidences", hasSize(1)))
+                .andExpect(jsonPath("$.evidences[0].id").value(rejectedId))
+                .andExpect(jsonPath("$.evidences[0].downloadUrl", nullValue()));
+        historyPage(buyer, transactionId, 2, 1)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.evidences", hasSize(1)))
+                .andExpect(jsonPath("$.evidences[0].id").value(substituteId))
+                .andExpect(jsonPath("$.evidences[0].downloadUrl", notNullValue()));
+        historyPage(buyer, transactionId, 3, 1)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalCount").value(2))
+                .andExpect(jsonPath("$.evidences", hasSize(0)));
+        historyOf(buyer, transactionId)
+                .andExpect(header().string("Total-Count", "2"))
+                .andExpect(jsonPath("$.page").value(1))
+                .andExpect(jsonPath("$.limit").value(20))
+                .andExpect(jsonPath("$.evidences", hasSize(2)));
+        historyPage(buyer, transactionId, 1, 5000).andExpect(jsonPath("$.limit").value(100));
+        historyPage(buyer, transactionId, 0, 20).andExpect(status().isBadRequest());
+        historyPage(buyer, transactionId, 1, -1).andExpect(status().isBadRequest());
+    }
+
+    @Test
     void onlyThePersonWhoMadeTheReservationSeesItsPayments() throws Exception {
         var buyer = BUYERS.incrementAndGet();
         var otherBuyer = BUYERS.incrementAndGet();
@@ -144,6 +189,13 @@ class PaymentHistoryIntegrationTest {
 
     private ResultActions historyOf(long buyer, UUID transactionId) throws Exception {
         return mockMvc.perform(get("/api/v1/reservations/{id}/payment-evidences", transactionId)
+                .header(HttpHeaders.AUTHORIZATION, bearer(Role.BUYER, buyer)));
+    }
+
+    private ResultActions historyPage(long buyer, UUID transactionId, int page, int limit) throws Exception {
+        return mockMvc.perform(get("/api/v1/reservations/{id}/payment-evidences", transactionId)
+                .param("page", String.valueOf(page))
+                .param("limit", String.valueOf(limit))
                 .header(HttpHeaders.AUTHORIZATION, bearer(Role.BUYER, buyer)));
     }
 

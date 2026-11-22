@@ -40,13 +40,17 @@ import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.hasSize;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -101,9 +105,7 @@ class VerificationIntegrationTest {
         var fieldEvidence = sendVoucher(field, "1500");
         var webEvidence = sendVoucher(web, "9000");
 
-        var queue = mockMvc.perform(get("/api/v1/verifications/pending").header(HttpHeaders.AUTHORIZATION, finance()))
-                .andExpect(status().isOk())
-                .andReturn().getResponse().getContentAsString();
+        var queue = queue();
 
         assertEquals("FIELD", entry(queue, fieldEvidence, "channel"));
         assertEquals("F-01", entry(queue, fieldEvidence, "lotCode"));
@@ -118,6 +120,47 @@ class VerificationIntegrationTest {
     }
 
     @Test
+    void theQueueComesInPagesLikeTheVouchersOldestFirst() throws Exception {
+        var first = sendVoucher(fieldReservation(lot("G-01")), "1500");
+        var second = sendVoucher(fieldReservation(lot("G-02")), "1500");
+        var third = sendVoucher(fieldReservation(lot("G-03")), "1500");
+        var everything = evidenceIds(queue());
+        var total = everything.size();
+
+        var paged = new ArrayList<Long>();
+        for (var page = 1; (page - 1) * 2 < total; page++) {
+            var body = queuePage(page, 2)
+                    .andExpect(status().isOk())
+                    .andExpect(header().string("Total-Count", String.valueOf(total)))
+                    .andExpect(header().string("Cache-Control", containsString("no-store")))
+                    .andExpect(jsonPath("$.totalCount").value(total))
+                    .andExpect(jsonPath("$.page").value(page))
+                    .andExpect(jsonPath("$.limit").value(2))
+                    .andReturn().getResponse().getContentAsString();
+            List<Map<String, Object>> items = JsonPath.read(body, "$.items");
+            assertTrue(items.size() <= 2);
+            paged.addAll(evidenceIds(items));
+        }
+
+        assertEquals(everything, paged, "pages of 2 are consecutive slices of the whole queue");
+        assertTrue(everything.indexOf(first) < everything.indexOf(second)
+                && everything.indexOf(second) < everything.indexOf(third), "oldest first");
+        queuePage(total / 2 + 2, 2)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items", hasSize(0)))
+                .andExpect(jsonPath("$.totalCount").value(total));
+        queuePage(1, 5000)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.limit").value(100));
+        mockMvc.perform(get("/api/v1/verifications/pending").header(HttpHeaders.AUTHORIZATION, finance()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.page").value(1))
+                .andExpect(jsonPath("$.limit").value(20));
+        queuePage(0, 20).andExpect(status().isBadRequest());
+        queuePage(1, 0).andExpect(status().isBadRequest());
+    }
+
+    @Test
     void theQueueShowsTheNegotiationTermsAgreedInTheField() throws Exception {
         var lot = lot("F-02");
         var reservationId = UUID.randomUUID();
@@ -127,9 +170,7 @@ class VerificationIntegrationTest {
         assertEquals("SYNCED", outcome.result());
         var evidence = sendVoucher(reservationId, "1500");
 
-        var queue = mockMvc.perform(get("/api/v1/verifications/pending").header(HttpHeaders.AUTHORIZATION, finance()))
-                .andExpect(status().isOk())
-                .andReturn().getResponse().getContentAsString();
+        var queue = queue();
 
         assertEquals(2500.50, ((Number) entry(queue, evidence, "discountAmount")).doubleValue());
         assertEquals("Cochera", entry(queue, evidence, "bonus"));
@@ -150,9 +191,7 @@ class VerificationIntegrationTest {
         var webEvidence = sendVoucher(web, "9000");
         var before = Instant.now();
 
-        var queue = mockMvc.perform(get("/api/v1/verifications/pending").header(HttpHeaders.AUTHORIZATION, finance()))
-                .andExpect(status().isOk())
-                .andReturn().getResponse().getContentAsString();
+        var queue = queue();
 
         assertEquals(true, entry(queue, pendingEvidence, "identityDocumentPending"));
         assertNull(entry(queue, pendingEvidence, "identityDocumentUrl"));
@@ -300,13 +339,43 @@ class VerificationIntegrationTest {
     }
 
     private boolean inQueue(Long evidenceId) throws Exception {
-        var queue = mockMvc.perform(get("/api/v1/verifications/pending").header(HttpHeaders.AUTHORIZATION, finance()))
-                .andReturn().getResponse().getContentAsString();
-        return !JsonPath.<List<Object>>read(queue, "$[?(@.evidenceId == %d)]".formatted(evidenceId)).isEmpty();
+        return queue().stream().anyMatch(entry -> evidenceId.equals(((Number) entry.get("evidenceId")).longValue()));
     }
 
-    private static Object entry(String queue, Long evidenceId, String field) {
-        List<Object> values = JsonPath.read(queue, "$[?(@.evidenceId == %d)].%s".formatted(evidenceId, field));
+    /**
+     * Every entry of the queue, walking its pages as the back office does: the suite shares its database, so the
+     * evidences of a test are not always on the first page.
+     */
+    private List<Map<String, Object>> queue() throws Exception {
+        var entries = new ArrayList<Map<String, Object>>();
+        for (var page = 1; ; page++) {
+            var body = queuePage(page, 100)
+                    .andExpect(status().isOk())
+                    .andReturn().getResponse().getContentAsString();
+            List<Map<String, Object>> items = JsonPath.read(body, "$.items");
+            entries.addAll(items);
+            if (items.size() < 100) {
+                return entries;
+            }
+        }
+    }
+
+    private ResultActions queuePage(int page, int limit) throws Exception {
+        return mockMvc.perform(get("/api/v1/verifications/pending")
+                .param("page", String.valueOf(page))
+                .param("limit", String.valueOf(limit))
+                .header(HttpHeaders.AUTHORIZATION, finance()));
+    }
+
+    private static List<Long> evidenceIds(List<Map<String, Object>> entries) {
+        return entries.stream().map(entry -> ((Number) entry.get("evidenceId")).longValue()).toList();
+    }
+
+    private static Object entry(List<Map<String, Object>> queue, Long evidenceId, String field) {
+        var values = queue.stream()
+                .filter(entry -> evidenceId.equals(((Number) entry.get("evidenceId")).longValue()))
+                .map(entry -> entry.get(field))
+                .toList();
         assertEquals(1, values.size(), "evidence %d in the queue".formatted(evidenceId));
         return values.getFirst();
     }
