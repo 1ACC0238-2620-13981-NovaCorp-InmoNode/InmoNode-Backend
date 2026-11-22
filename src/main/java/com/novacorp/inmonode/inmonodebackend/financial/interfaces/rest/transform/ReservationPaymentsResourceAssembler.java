@@ -12,10 +12,12 @@ public final class ReservationPaymentsResourceAssembler {
 
     public static ReservationPaymentsResource toResourceFromPayments(ReservationPayments payments) {
         var reservation = payments.reservation();
+        var evidences = payments.evidences();
         return new ReservationPaymentsResource(reservation.getSourceEventId(), reservation.getChannel().name(),
                 reservation.getStatus().name(), reservation.getInitialAmount().amount(),
                 reservation.getInitialAmount().currency(), payments.waitingUntil(),
-                payments.evidences().stream().map(ReservationPaymentsResourceAssembler::toResource).toList());
+                evidences.items().stream().map(ReservationPaymentsResourceAssembler::toResource).toList(),
+                evidences.totalCount(), evidences.page(), evidences.limit());
     }
 
     /** The reviewer's note is shown only as the reason of a rejection; an approval note stays internal. */
