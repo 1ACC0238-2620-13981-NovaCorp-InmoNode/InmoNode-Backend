@@ -7,6 +7,7 @@ import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.HeadObjectRequest;
+import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.model.S3Exception;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
@@ -84,6 +85,21 @@ public class S3ObjectStorage implements ObjectStorage {
         try {
             var head = s3Client.headObject(HeadObjectRequest.builder().bucket(bucket).key(key).build());
             return Optional.of(new StoredObject(head.contentLength(), head.contentType()));
+        } catch (S3Exception ex) {
+            if (ex.statusCode() == NOT_FOUND) {
+                return Optional.empty();
+            }
+            throw ex;
+        }
+    }
+
+    @Override
+    public Optional<byte[]> read(String key) {
+        try {
+            return Optional.of(s3Client.getObjectAsBytes(GetObjectRequest.builder().bucket(bucket).key(key).build())
+                    .asByteArray());
+        } catch (NoSuchKeyException ex) {
+            return Optional.empty();
         } catch (S3Exception ex) {
             if (ex.statusCode() == NOT_FOUND) {
                 return Optional.empty();

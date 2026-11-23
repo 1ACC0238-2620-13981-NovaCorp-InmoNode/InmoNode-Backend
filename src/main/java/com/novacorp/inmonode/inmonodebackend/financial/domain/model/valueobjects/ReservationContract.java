@@ -10,11 +10,20 @@ import java.time.Instant;
 /**
  * The contract of a reservation as its buyer sees it (US-21).
  *
- * @param contract          the issued contract; {@code null} unless {@code ISSUED}
- * @param downloadUrl       presigned link to the PDF; {@code null} unless {@code ISSUED}
- * @param downloadExpiresAt when that link stops working
+ * @param contract                the issued contract; {@code null} unless {@code ISSUED}
+ * @param downloadUrl             presigned link to the PDF; {@code null} unless {@code ISSUED}
+ * @param downloadExpiresAt       when that link stops working
+ * @param signedDownloadUrl       presigned link to the signed signature sheet, once signed (US-56)
+ * @param signedDownloadExpiresAt when that link stops working
  */
 public record ReservationContract(Reservation reservation, ContractAvailability availability,
                                   @Nullable Contract contract, @Nullable URI downloadUrl,
-                                  @Nullable Instant downloadExpiresAt) {
+                                  @Nullable Instant downloadExpiresAt, @Nullable URI signedDownloadUrl,
+                                  @Nullable Instant signedDownloadExpiresAt) {
+
+    public ReservationContract(Reservation reservation, ContractAvailability availability,
+                               @Nullable Contract contract, @Nullable URI downloadUrl,
+                               @Nullable Instant downloadExpiresAt) {
+        this(reservation, availability, contract, downloadUrl, downloadExpiresAt, null, null);
+    }
 }
