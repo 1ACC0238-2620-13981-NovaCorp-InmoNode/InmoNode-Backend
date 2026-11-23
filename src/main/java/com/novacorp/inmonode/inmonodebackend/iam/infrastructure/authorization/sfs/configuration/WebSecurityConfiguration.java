@@ -41,6 +41,8 @@ public class WebSecurityConfiguration {
 
     private static final String[] PUBLIC_ENDPOINTS = {
             "/api/v1/auth/**",
+            // Called by external services (US-55): their signature authenticates them, verified by each endpoint.
+            "/api/v1/webhooks/**",
             "/api-docs",
             "/v3/api-docs/**",
             "/swagger-ui/**",

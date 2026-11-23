@@ -2,6 +2,7 @@ package com.novacorp.inmonode.inmonodebackend.financial.domain.model.aggregates;
 
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.entities.Installment;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.InstallmentStatus;
+import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.PaymentSource;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.services.AmortizationSchedule;
 import org.jspecify.annotations.Nullable;
 
@@ -177,6 +178,18 @@ public class AccountStatement {
      */
     public void registerInstallmentPayment(int number, BigDecimal paid, Instant paidAt) {
         existingInstallment(number).registerPayment(paid, paidAt);
+    }
+
+    /**
+     * US-55: the payment gateway confirmed the charge of an installment, so it is paid with exactly what is due and
+     * keeps the gateway's payment reference.
+     *
+     * @throws IllegalArgumentException when the installment does not exist, the amount is not exactly what is due or
+     *                                  the reference is missing
+     * @throws IllegalStateException    when the installment is already paid
+     */
+    public void creditGatewayPayment(int number, BigDecimal paid, Instant paidAt, String reference) {
+        existingInstallment(number).registerPayment(paid, paidAt, PaymentSource.GATEWAY, reference);
     }
 
     /**

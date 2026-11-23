@@ -25,12 +25,15 @@ public record AccountStatementResource(Long id, UUID transactionId, Long lotId, 
                                        boolean dueSoon, List<InstallmentResource> installments) {
 
     /**
-     * @param status    PENDING, PAID or OVERDUE
-     * @param penalty   late fee charged when it fell overdue
-     * @param amountDue what pays it: the amount plus the penalty
+     * @param status           PENDING, PAID or OVERDUE
+     * @param penalty          late fee charged when it fell overdue
+     * @param amountDue        what pays it: the amount plus the penalty
+     * @param paymentSource    BACK_OFFICE or GATEWAY once it is paid (US-55)
+     * @param paymentReference the gateway's id of the charge, when the gateway charged it
      */
     public record InstallmentResource(int number, LocalDate dueDate, BigDecimal amount, BigDecimal principal,
                                       BigDecimal interest, BigDecimal penalty, BigDecimal amountDue, String status,
-                                      Instant paidAt, BigDecimal paidAmount) {
+                                      Instant paidAt, BigDecimal paidAmount, String paymentSource,
+                                      String paymentReference) {
     }
 }

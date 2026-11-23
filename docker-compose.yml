@@ -119,6 +119,11 @@ services:
       # US-45: PDF requests go through the broker; the consumer aborts a rendering after this long.
       CLOUDAMQP_URL: amqp://${BROKER_USER:-inmonode-dev}:${BROKER_PASSWORD:-inmonode-dev-secret}@inmonode-broker:5672
       DOCUMENT_RENDER_TIMEOUT: ${DOCUMENT_RENDER_TIMEOUT:-PT30S}
+      # US-55: Stripe in test mode; without the keys, starting a payment answers 503 PAYMENTS_UNAVAILABLE.
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      STRIPE_PUBLISHABLE_KEY: ${STRIPE_PUBLISHABLE_KEY:-}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+      PAYMENT_INTENT_TTL: ${PAYMENT_INTENT_TTL:-PT30M}
 
 volumes:
   inmonode-db-data:

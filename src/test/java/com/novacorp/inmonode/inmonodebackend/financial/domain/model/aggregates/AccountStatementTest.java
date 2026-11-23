@@ -5,6 +5,7 @@ import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.FinancingPlan;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.InstallmentStatus;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.Money;
+import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.PaymentSource;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.ReservationChannel;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.ReservationStatus;
 import org.jspecify.annotations.Nullable;
@@ -114,6 +115,28 @@ class AccountStatementTest {
         assertEquals(new BigDecimal("35070.58"), statement.balance());
         assertEquals(1, statement.nextInstallment().orElseThrow().getNumber());
         assertFalse(statement.isFullyPaid());
+        assertEquals(PaymentSource.BACK_OFFICE, third.getPaymentSource());
+        assertNull(third.getPaymentReference());
+    }
+
+    @Test
+    void theGatewayCreditsAnInstallmentWithItsPaymentReference() {
+        var statement = AccountStatement.open(contract(5L), reservation(PLAN), NOW);
+
+        statement.creditGatewayPayment(2, new BigDecimal("3188.23"), NOW, "pi_123");
+
+        var second = statement.findInstallment(2).orElseThrow();
+        assertEquals(InstallmentStatus.PAID, second.getStatus());
+        assertEquals(PaymentSource.GATEWAY, second.getPaymentSource());
+        assertEquals("pi_123", second.getPaymentReference());
+        assertEquals(NOW, second.getPaidAt());
+        assertThrows(IllegalStateException.class,
+                () -> statement.creditGatewayPayment(2, new BigDecimal("3188.23"), NOW, "pi_456"));
+        assertThrows(IllegalArgumentException.class,
+                () -> statement.creditGatewayPayment(3, new BigDecimal("3188.23"), NOW, " "));
+        assertThrows(IllegalArgumentException.class,
+                () -> statement.creditGatewayPayment(3, new BigDecimal("3000.00"), NOW, "pi_789"));
+        assertEquals(InstallmentStatus.PENDING, statement.findInstallment(3).orElseThrow().getStatus());
     }
 
     @Test
@@ -311,12 +334,12 @@ class AccountStatementTest {
     private static Installment paid(Installment installment) {
         return Installment.restore(installment.getNumber() * 100L, installment.getNumber(), installment.getDueDate(),
                 installment.getAmount(), installment.getPrincipal(), installment.getInterest(), InstallmentStatus.PAID,
-                NOW, installment.amountDue(), installment.getPenalty(), null, null);
+                NOW, installment.amountDue(), installment.getPenalty(), null, null, PaymentSource.BACK_OFFICE, null);
     }
 
     private static Installment overdue(Installment installment, BigDecimal penalty) {
         return Installment.restore(installment.getNumber() * 100L, installment.getNumber(), installment.getDueDate(),
                 installment.getAmount(), installment.getPrincipal(), installment.getInterest(),
-                InstallmentStatus.OVERDUE, null, null, penalty, null, NOW);
+                InstallmentStatus.OVERDUE, null, null, penalty, null, NOW, null, null);
     }
 }
