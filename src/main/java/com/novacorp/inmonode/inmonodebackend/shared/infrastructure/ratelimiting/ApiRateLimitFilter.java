@@ -21,7 +21,9 @@ public class ApiRateLimitFilter extends OncePerRequestFilter {
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
-        return !enabled || "OPTIONS".equals(request.getMethod()) || !path(request).startsWith("/api/v1/");
+        // Webhooks come in bursts from a few addresses of the provider and are authenticated by their signature.
+        return !enabled || "OPTIONS".equals(request.getMethod()) || !path(request).startsWith("/api/v1/")
+                || path(request).startsWith("/api/v1/webhooks/");
     }
 
     @Override

@@ -25,6 +25,7 @@ public class FinancialAuditFilter extends OncePerRequestFilter {
                 || path.startsWith("/api/v1/account-statements") || path.startsWith("/api/v1/separation-requests")
                 || path.startsWith("/api/v1/vouchers") || path.startsWith("/api/v1/field-sync")
                 || path.startsWith("/api/v1/payment-evidences") || path.startsWith("/api/v1/verifications")
+                || path.startsWith("/api/v1/webhooks")
                 || path.matches("/api/v1/lots/[^/]+/separation-requests"));
     }
 
