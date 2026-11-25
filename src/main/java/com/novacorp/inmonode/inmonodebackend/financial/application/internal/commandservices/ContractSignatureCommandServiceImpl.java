@@ -264,17 +264,18 @@ public class ContractSignatureCommandServiceImpl implements ContractSignatureCom
         if (known.isPresent() && known.get().outcome() != SignatureEventOutcome.REJECTED) {
             return Result.success(known.get());
         }
-        SignatureEventRecord record;
+        Logged logged;
         try {
-            record = process(event);
+            logged = process(event);
         } catch (SignatureProviderException failure) {
             LOG.warn("Could not confirm the signature callback {} with the provider: {}", event.eventKey(),
                     failure.getMessage());
             return Result.failure(new ApplicationError("SIGNATURE_PROVIDER_ERROR",
                     "The signature provider could not confirm the callback"));
         }
-        if (!events.record(record)) {
-            return Result.success(events.findByKey(record.eventKey()).orElse(record));
+        var record = logged.answer();
+        if (!logged.first()) {
+            return Result.success(record);
         }
         if (record.outcome() == SignatureEventOutcome.REJECTED) {
             LOG.warn("Signature callback {} was rejected: {}", record.eventKey(), record.detail());
@@ -284,7 +285,11 @@ public class ContractSignatureCommandServiceImpl implements ContractSignatureCom
         return Result.success(record);
     }
 
-    private SignatureEventRecord process(SignatureEvent event) {
+    /** What a callback answers, and whether this delivery is the one that logged it. */
+    private record Logged(SignatureEventRecord answer, boolean first) {
+    }
+
+    private Logged process(SignatureEvent event) {
         if (event.kind() == SignatureEvent.Kind.OTHER) {
             return record(event, null, SignatureEventOutcome.IGNORED, "this type changes no contract");
         }
@@ -300,8 +305,11 @@ public class ContractSignatureCommandServiceImpl implements ContractSignatureCom
         return event.kind() == SignatureEvent.Kind.COMPLETED ? sign(contract, event) : decline(contract, event);
     }
 
-    /** Scenario 1: the API confirms the signature, the signed sheet is kept, and only then the contract changes. */
-    private SignatureEventRecord sign(Contract contract, SignatureEvent event) {
+    /**
+     * Scenario 1: the API confirms the signature, the signed sheet is kept, and only then the contract changes. The
+     * outcome is logged in the same transaction, so a delivery that waited for the lock answers it.
+     */
+    private Logged sign(Contract contract, SignatureEvent event) {
         var submissionId = Objects.requireNonNull(event.submissionId());
         if (contract.isSigned()) {
             return record(event, contract.getId(), SignatureEventOutcome.DUPLICATE, "already signed");
@@ -351,7 +359,7 @@ public class ContractSignatureCommandServiceImpl implements ContractSignatureCom
         });
     }
 
-    private SignatureEventRecord decline(Contract contract, SignatureEvent event) {
+    private Logged decline(Contract contract, SignatureEvent event) {
         var submissionId = Objects.requireNonNull(event.submissionId());
         var submission = provider.fetchSubmission(submissionId);
         var rejection = rejectionOf(contract, submission, SignatureSubmission.Status.DECLINED);
@@ -395,10 +403,18 @@ public class ContractSignatureCommandServiceImpl implements ContractSignatureCom
         return null;
     }
 
-    private SignatureEventRecord record(SignatureEvent event, Long contractId, SignatureEventOutcome outcome,
-                                        String detail) {
-        return new SignatureEventRecord(event.eventKey(), event.type(), event.submissionId(), contractId, outcome,
+    /**
+     * Logs what a callback did; inside the transaction that did it when there is one, so the outcome kept for a
+     * callback is always the one of the delivery that applied it. A delivery that finds it logged answers what was
+     * kept.
+     */
+    private Logged record(SignatureEvent event, Long contractId, SignatureEventOutcome outcome, String detail) {
+        var record = new SignatureEventRecord(event.eventKey(), event.type(), event.submissionId(), contractId, outcome,
                 detail, now());
+        if (events.record(record)) {
+            return new Logged(record, true);
+        }
+        return new Logged(events.findByKey(record.eventKey()).orElse(record), false);
     }
 
     /** PostgreSQL keeps microseconds: the dates answered now must equal the ones read back later. */
