@@ -3,11 +3,13 @@ package com.novacorp.inmonode.inmonodebackend.financial.interfaces.rest;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.commands.AcknowledgeContractCommand;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.commands.IssueContractCommand;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.commands.RequestContractDocumentCommand;
+import com.novacorp.inmonode.inmonodebackend.financial.domain.model.commands.RequestContractSignatureCommand;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.commands.RequestContractUploadCommand;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.queries.GetReservationContractQuery;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.services.ContractCommandService;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.services.ContractDocumentCommandService;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.services.ContractQueryService;
+import com.novacorp.inmonode.inmonodebackend.financial.domain.services.ContractSignatureCommandService;
 import com.novacorp.inmonode.inmonodebackend.financial.interfaces.rest.resources.ContractDocumentResource;
 import com.novacorp.inmonode.inmonodebackend.financial.interfaces.rest.transform.ContractResourceAssembler;
 import com.novacorp.inmonode.inmonodebackend.financial.interfaces.rest.transform.DocumentRequestResourceAssembler;
@@ -39,13 +41,16 @@ public class ContractsController {
     private final ContractCommandService contractCommandService;
     private final ContractQueryService contractQueryService;
     private final ContractDocumentCommandService contractDocumentCommandService;
+    private final ContractSignatureCommandService contractSignatureCommandService;
 
     public ContractsController(ContractCommandService contractCommandService,
                                ContractQueryService contractQueryService,
-                               ContractDocumentCommandService contractDocumentCommandService) {
+                               ContractDocumentCommandService contractDocumentCommandService,
+                               ContractSignatureCommandService contractSignatureCommandService) {
         this.contractCommandService = contractCommandService;
         this.contractQueryService = contractQueryService;
         this.contractDocumentCommandService = contractDocumentCommandService;
+        this.contractSignatureCommandService = contractSignatureCommandService;
     }
 
     @PostMapping("/reservations/{transactionId}/contract/document-requests")
@@ -107,6 +112,22 @@ public class ContractsController {
         var result = contractQueryService.handle(new GetReservationContractQuery(transactionId));
         return ResponseEntityAssembler.toResponseEntityFromResult(
                 result, ContractResourceAssembler::toResourceFromReservationContract, HttpStatus.OK);
+    }
+
+    @PostMapping("/contracts/{contractId}/signature-request")
+    @PreAuthorize("hasRole('FINANCE_ADMIN')")
+    @Operation(summary = "Send a contract to electronic signature again (US-56)",
+            description = "Finance back office only (FINANCE_ADMIN). An issued contract is sent to DocuSeal on its "
+                    + "own, retried with growing waits (1, 2, 4 ... 60 minutes, 8 attempts); use this after finance "
+                    + "was told its attempts ran out, after the buyer declined, or for a contract issued before the "
+                    + "signature existed. Answers 202 with the contract and its request PENDING; when it is already "
+                    + "on its way or waiting for the buyer, it answers how it is and changes nothing. 409 "
+                    + "SIGNATURE_CONFLICT when it is already signed, 404 CONTRACT_NOT_FOUND, and 400 "
+                    + "CONTRACT_FILE_NOT_UPLOADED when the PDF whose hash the signature sheet cites is missing.")
+    public ResponseEntity<?> requestSignature(@PathVariable Long contractId) {
+        var result = contractSignatureCommandService.handle(new RequestContractSignatureCommand(contractId));
+        return ResponseEntityAssembler.toResponseEntityFromResult(
+                result, ContractResourceAssembler::toResourceFromProgress, HttpStatus.ACCEPTED);
     }
 
     @PostMapping("/contracts/{contractId}/acknowledgment")

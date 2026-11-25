@@ -57,8 +57,11 @@ public class ContractQueryServiceImpl implements ContractQueryService {
                     null, null, null));
         }
         var download = objectStorage.presignDownload(contract.get().getObjectKey(), DOWNLOAD_URL_VALIDITY);
+        var signed = contract.get().getSignedDocument() == null ? null
+                : objectStorage.presignDownload(contract.get().getSignedDocument().objectKey(), DOWNLOAD_URL_VALIDITY);
         return Result.success(new ReservationContract(reservation, ContractAvailability.ISSUED, contract.get(),
-                download.url(), download.expiresAt()));
+                download.url(), download.expiresAt(), signed == null ? null : signed.url(),
+                signed == null ? null : signed.expiresAt()));
     }
 
     /** US-21, Scenario 2: once the payment arrived, the contract is on its way. */

@@ -30,6 +30,14 @@ public interface ObjectStorage {
     void store(String key, String contentType, byte[] content);
 
     /**
+     * The bytes of the object under {@code key}, for files the backend must read itself, such as a contract whose
+     * hash the signature sheet cites (US-56). Meant for small files, up to the 10 MB of a contract.
+     *
+     * @return empty when nothing is stored there
+     */
+    Optional<byte[]> read(String key);
+
+    /**
      * Signs a {@code GET} of the object under {@code key}, so a client reads it straight from the storage while the
      * bucket stays private. Signing does not check the object exists; the storage answers 404 if it does not.
      *

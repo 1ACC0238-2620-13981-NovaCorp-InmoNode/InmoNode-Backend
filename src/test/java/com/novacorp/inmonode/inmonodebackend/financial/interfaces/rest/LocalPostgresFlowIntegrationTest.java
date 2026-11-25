@@ -55,6 +55,8 @@ class LocalPostgresFlowIntegrationTest {
                 call.<String>getArgument(0).endsWith(".pdf") ? "application/pdf" : "image/jpeg")));
         when(storage.presignDownload(anyString(), any())).thenReturn(new ObjectStorage.PresignedDownload(
                 URI.create("https://storage.example.test/test-only"), Instant.now().plusSeconds(600)));
+        // US-56: issuing reads the PDF to keep its hash; the declared size is 3000 bytes.
+        when(storage.read(anyString())).thenAnswer(call -> Optional.of(new byte[3000]));
     }
 
     @Test void persistedCatalogQuoteCoOwnerContractStatementAndOutboxCompleteTheWebFlow() throws Exception {

@@ -9,7 +9,10 @@ import com.novacorp.inmonode.inmonodebackend.financial.domain.model.commands.Ack
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.commands.IssueContractCommand;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.commands.RequestContractUploadCommand;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.ContractDocument;
+import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.ContractSignatureDelivery;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.ContractUpload;
+import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.SignedContractDocument;
+import com.novacorp.inmonode.inmonodebackend.financial.domain.repositories.ContractSignatureDeliveryRepository;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.repositories.AccountStatementRepository;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.repositories.ContractRepository;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.repositories.LotRepository;
@@ -43,13 +46,16 @@ public class ContractCommandServiceImpl implements ContractCommandService {
     private final LotRepository lotRepository;
     private final ExternalQuotationSnapshotService quotationSnapshots;
     private final com.novacorp.inmonode.inmonodebackend.financial.application.internal.outboundservices.notifications.FinancialNotificationOutbox notifications;
+    private final ContractSignatureDeliveryRepository signatureDeliveries;
 
     public ContractCommandServiceImpl(ReservationRepository reservationRepository,
                                       ContractRepository contractRepository,
                                       AccountStatementRepository accountStatementRepository,
                                       ObjectStorage objectStorage, ExternalIamService externalIamService,
                                       Clock clock, LotRepository lotRepository, ExternalQuotationSnapshotService quotationSnapshots,
-            com.novacorp.inmonode.inmonodebackend.financial.application.internal.outboundservices.notifications.FinancialNotificationOutbox notifications) {
+            com.novacorp.inmonode.inmonodebackend.financial.application.internal.outboundservices.notifications.FinancialNotificationOutbox notifications,
+                                      ContractSignatureDeliveryRepository signatureDeliveries) {
+        this.signatureDeliveries = signatureDeliveries;
         this.reservationRepository = reservationRepository;
         this.contractRepository = contractRepository;
         this.accountStatementRepository = accountStatementRepository;
@@ -91,10 +97,20 @@ public class ContractCommandServiceImpl implements ContractCommandService {
                         "no PDF of %d bytes at %s; upload it with a new URL and issue the contract again"
                                 .formatted(document.sizeBytes(), document.objectKey())));
             }
+            var pdf = objectStorage.read(document.objectKey()).orElse(null);
+            if (pdf == null || pdf.length != document.sizeBytes()) {
+                return Result.failure(new ApplicationError("CONTRACT_FILE_NOT_UPLOADED",
+                        "The contract file is not in the file repository",
+                        "the PDF at %s could not be read; upload it with a new URL and issue the contract again"
+                                .formatted(document.objectKey())));
+            }
             // PostgreSQL keeps microseconds: the dates answered now must equal the ones read back later.
             var now = clock.instant().truncatedTo(ChronoUnit.MICROS);
-            var saved = contractRepository.save(Contract.issue(reservation, document, issuerId, now));
+            var saved = contractRepository.save(Contract.issue(reservation, document,
+                    SignedContractDocument.sha256Of(pdf), issuerId, now));
             openAccountStatement(saved, now);
+            // US-56: the signature sheet cites the hash just kept; the job sends it to the provider.
+            signatureDeliveries.save(ContractSignatureDelivery.queue(Objects.requireNonNull(saved.getId()), now));
             return Result.success(saved);
         });
     }

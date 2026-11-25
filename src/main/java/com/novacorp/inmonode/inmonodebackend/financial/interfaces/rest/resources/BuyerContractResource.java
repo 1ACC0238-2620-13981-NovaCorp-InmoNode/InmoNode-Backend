@@ -6,13 +6,22 @@ import java.util.UUID;
 /**
  * The contract of a reservation, as its buyer sees it (US-21).
  *
- * @param availability      ISSUED (read and download it), IN_PREPARATION ("Contrato en elaboración": the payment
- *                          arrived and the back office is preparing it) or NOT_AVAILABLE (no payment yet, or the
- *                          reservation no longer holds the lot)
- * @param contractId        send it to register the agreement; only when ISSUED
- * @param downloadUrl       the PDF, only when ISSUED; it works until {@code downloadExpiresAt}
- * @param acknowledgedAt    when the buyer gave their preliminary agreement (US-22); {@code null} until then
+ * @param availability            ISSUED (read and download it), IN_PREPARATION ("Contrato en elaboración": the
+ *                                payment arrived and the back office is preparing it) or NOT_AVAILABLE (no payment
+ *                                yet, or the reservation no longer holds the lot)
+ * @param contractId              send it to register the agreement; only when ISSUED
+ * @param downloadUrl             the PDF, only when ISSUED; it works until {@code downloadExpiresAt}
+ * @param acknowledgedAt          when the buyer gave their preliminary agreement (US-22); {@code null} until then
+ * @param status                  the contract: ISSUED (being sent to signature), SIGNATURE_REQUESTED (sign it at
+ *                                {@code signingUrl}), SIGNED or SIGNATURE_DECLINED (US-56)
+ * @param documentSha256          the SHA-256 of the PDF, which the signature sheet cites
+ * @param signingUrl              where to sign it, only while SIGNATURE_REQUESTED; it is personal
+ * @param signedDownloadUrl       the signed signature sheet, once SIGNED; it works until
+ *                                {@code signedDownloadExpiresAt}
  */
 public record BuyerContractResource(UUID transactionId, String availability, Long contractId, Instant issuedAt,
-                                    String downloadUrl, Instant downloadExpiresAt, Instant acknowledgedAt, CoOwnerResource coOwner) {
+                                    String downloadUrl, Instant downloadExpiresAt, Instant acknowledgedAt,
+                                    CoOwnerResource coOwner, String status, String documentSha256, String signingUrl,
+                                    Instant signedAt, String signedDownloadUrl, Instant signedDownloadExpiresAt,
+                                    Instant signatureDeclinedAt) {
 }
