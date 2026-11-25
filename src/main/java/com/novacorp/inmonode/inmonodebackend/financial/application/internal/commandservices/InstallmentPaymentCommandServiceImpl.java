@@ -244,9 +244,10 @@ public class InstallmentPaymentCommandServiceImpl implements InstallmentPaymentC
             var charge = paymentGateway.retrieve(providerId);
             switch (charge.status()) {
                 case SUCCEEDED -> {
-                    var decision = confirm(intent.getId(), charge);
+                    var applied = Objects.requireNonNull(transactionTemplate.execute(status ->
+                            applyCharge(intent.getId(), charge)));
                     LOG.info("Payment {} was charged before its notification came: {}", intent.getId(),
-                            decision.outcome());
+                            applied.outcome());
                     return intentRepository.findById(intent.getId()).orElseThrow();
                 }
                 case PROCESSING -> {
@@ -298,47 +299,60 @@ public class InstallmentPaymentCommandServiceImpl implements InstallmentPaymentC
         if (known.isPresent()) {
             return Result.success(known.get());
         }
-        Decision decision;
+        Logged logged;
         try {
-            decision = process(event);
+            logged = process(event);
         } catch (PaymentGatewayException ex) {
             LOG.warn("Could not check event {} with the payment gateway; it will be sent again: {}", event.id(),
                     ex.getMessage());
             return Result.failure(gatewayError());
         }
-        var record = new PaymentGatewayEventRecord(event.id(), event.type(), event.providerId(), decision.outcome(),
-                decision.detail(), now());
-        if (!eventRepository.record(record)) {
-            return Result.success(eventRepository.findById(event.id()).orElse(record));
+        var record = logged.answer();
+        if (!logged.first()) {
+            return Result.success(record);
         }
-        if (decision.outcome() == PaymentGatewayEventOutcome.REJECTED
-                || decision.outcome() == PaymentGatewayEventOutcome.UNAPPLIED) {
+        if (record.outcome() == PaymentGatewayEventOutcome.REJECTED
+                || record.outcome() == PaymentGatewayEventOutcome.UNAPPLIED) {
             LOG.warn("Payment gateway event {} ({}) of {}: {}, {}", event.id(), event.type(), event.providerId(),
-                    decision.outcome(), decision.detail());
+                    record.outcome(), record.detail());
         } else {
             LOG.info("Payment gateway event {} ({}) of {}: {}", event.id(), event.type(), event.providerId(),
-                    decision.outcome());
+                    record.outcome());
         }
         return Result.success(record);
     }
 
-    private record Decision(PaymentGatewayEventOutcome outcome, @Nullable String detail) {}
+    /** What an event answers, and whether this delivery is the one that logged it. */
+    private record Logged(PaymentGatewayEventRecord answer, boolean first) {}
 
-    private Decision process(PaymentGatewayEvent event) {
+    /**
+     * Logs what an event did; inside the transaction that did it when there is one, so the outcome kept for an
+     * event is always the one of the delivery that applied it, even when two deliveries of it run at once. A
+     * delivery that finds it logged answers what was kept.
+     */
+    private Logged record(PaymentGatewayEvent event, PaymentGatewayEventOutcome outcome, @Nullable String detail) {
+        var record = new PaymentGatewayEventRecord(event.id(), event.type(), event.providerId(), outcome, detail, now());
+        if (eventRepository.record(record)) {
+            return new Logged(record, true);
+        }
+        return new Logged(eventRepository.findById(event.id()).orElse(record), false);
+    }
+
+    private Logged process(PaymentGatewayEvent event) {
         if (event.kind() == PaymentGatewayEvent.Kind.OTHER) {
-            return new Decision(PaymentGatewayEventOutcome.IGNORED, "not about the charge of an installment");
+            return record(event, PaymentGatewayEventOutcome.IGNORED, "not about the charge of an installment");
         }
         if (!event.isOfThisApp()) {
-            return new Decision(PaymentGatewayEventOutcome.IGNORED, "the charge is of another app");
+            return record(event, PaymentGatewayEventOutcome.IGNORED, "the charge is of another app");
         }
         var intent = intentOf(event).orElse(null);
         if (intent == null) {
-            return new Decision(PaymentGatewayEventOutcome.IGNORED, "no payment of this environment has that charge");
+            return record(event, PaymentGatewayEventOutcome.IGNORED, "no payment of this environment has that charge");
         }
         return switch (event.kind()) {
-            case PAYMENT_SUCCEEDED -> confirmCharge(intent, Objects.requireNonNull(event.providerId()));
-            case PAYMENT_FAILED -> recordFailure(intent.getId(), event.failureMessage());
-            case PAYMENT_CANCELED -> recordCancellation(intent.getId());
+            case PAYMENT_SUCCEEDED -> confirmCharge(event, intent, Objects.requireNonNull(event.providerId()));
+            case PAYMENT_FAILED -> recordFailure(event, intent.getId(), event.failureMessage());
+            case PAYMENT_CANCELED -> recordCancellation(event, intent.getId());
             case OTHER -> throw new IllegalStateException("unreachable");
         };
     }
@@ -359,57 +373,63 @@ public class InstallmentPaymentCommandServiceImpl implements InstallmentPaymentC
     }
 
     /** Checked with the gateway as the charge is now, not only as the notification tells it. */
-    private Decision confirmCharge(InstallmentPaymentIntent intent, String providerId) {
+    private Logged confirmCharge(PaymentGatewayEvent event, InstallmentPaymentIntent intent, String providerId) {
         var charge = paymentGateway.retrieve(providerId);
         if (!charge.isSucceeded()) {
-            return new Decision(PaymentGatewayEventOutcome.REJECTED,
+            return record(event, PaymentGatewayEventOutcome.REJECTED,
                     "the gateway shows the charge as " + charge.status());
         }
         if (charge.amountReceived() != intent.amountInMinorUnits() || !charge.currency().equals(intent.getCurrency())) {
-            return new Decision(PaymentGatewayEventOutcome.REJECTED,
+            return record(event, PaymentGatewayEventOutcome.REJECTED,
                     "the gateway charged %d %s in minor units, and payment %s is of %d %s".formatted(
                             charge.amountReceived(), charge.currency(), intent.getId(), intent.amountInMinorUnits(),
                             intent.getCurrency()));
         }
-        return confirm(intent.getId(), charge);
+        return confirm(event, intent.getId(), charge);
     }
 
-    /**
-     * Credits the installment with a charge the gateway confirmed, once. When the installment no longer owes it
-     * (paid some other way meanwhile, or a late fee added), the money is kept as unapplied and finance is told to
-     * refund it, since partial payments and credit balances are not handled.
-     */
-    private Decision confirm(UUID intentId, GatewayPaymentIntent charge) {
+    /** The webhook's confirmation, logged in the transaction that credits it. */
+    private Logged confirm(PaymentGatewayEvent event, UUID intentId, GatewayPaymentIntent charge) {
         return Objects.requireNonNull(transactionTemplate.execute(status -> {
-            var statement = lockStatement(intentRepository.findById(intentId).orElseThrow().getAccountStatementId());
-            var intent = intentRepository.findByIdForUpdate(intentId).orElseThrow();
-            if (intent.isConfirmed()) {
-                return new Decision(PaymentGatewayEventOutcome.DUPLICATE,
-                        "payment %s was already confirmed".formatted(intentId));
-            }
-            if (intent.isOpen() && intent.getProviderPaymentIntentId() == null) {
-                intent.attach(charge.id());
-            }
-            var now = now();
-            var installment = statement.findInstallment(intent.getInstallmentNumber()).orElseThrow();
-            if (installment.isPaid() || !installment.isSettledBy(intent.getAmount())) {
-                var reason = installment.isPaid()
-                        ? "installment %d was already paid on %s".formatted(installment.getNumber(),
-                        installment.getPaidAt())
-                        : "installment %d now owes %s %s".formatted(installment.getNumber(), installment.amountDue(),
-                        statement.getCurrency());
-                intent.markUnapplied(charge.chargeId(), now, reason);
-                intentRepository.save(intent);
-                notifyUnapplied(statement, intent, installment, charge);
-                return new Decision(PaymentGatewayEventOutcome.UNAPPLIED, reason);
-            }
-            statement.creditGatewayPayment(installment.getNumber(), intent.getAmount(), now, charge.id());
-            accountStatementRepository.save(statement);
-            intent.succeed(charge.chargeId(), now);
-            intentRepository.save(intent);
-            return new Decision(PaymentGatewayEventOutcome.CREDITED, "installment %d of account statement %d"
-                    .formatted(installment.getNumber(), statement.getId()));
+            var applied = applyCharge(intentId, charge);
+            return record(event, applied.outcome(), applied.detail());
         }));
+    }
+
+    private record Applied(PaymentGatewayEventOutcome outcome, String detail) {}
+
+    /**
+     * Credits the installment with a charge the gateway confirmed, once; it runs in the caller's transaction. When
+     * the installment no longer owes it (paid some other way meanwhile, or a late fee added), the money is kept as
+     * unapplied and finance is told to refund it, since partial payments and credit balances are not handled.
+     */
+    private Applied applyCharge(UUID intentId, GatewayPaymentIntent charge) {
+        var statement = lockStatement(intentRepository.findById(intentId).orElseThrow().getAccountStatementId());
+        var intent = intentRepository.findByIdForUpdate(intentId).orElseThrow();
+        if (intent.isConfirmed()) {
+            return new Applied(PaymentGatewayEventOutcome.DUPLICATE, "payment %s was already confirmed".formatted(intentId));
+        }
+        if (intent.isOpen() && intent.getProviderPaymentIntentId() == null) {
+            intent.attach(charge.id());
+        }
+        var now = now();
+        var installment = statement.findInstallment(intent.getInstallmentNumber()).orElseThrow();
+        if (installment.isPaid() || !installment.isSettledBy(intent.getAmount())) {
+            var reason = installment.isPaid()
+                    ? "installment %d was already paid on %s".formatted(installment.getNumber(), installment.getPaidAt())
+                    : "installment %d now owes %s %s".formatted(installment.getNumber(), installment.amountDue(),
+                    statement.getCurrency());
+            intent.markUnapplied(charge.chargeId(), now, reason);
+            intentRepository.save(intent);
+            notifyUnapplied(statement, intent, installment, charge);
+            return new Applied(PaymentGatewayEventOutcome.UNAPPLIED, reason);
+        }
+        statement.creditGatewayPayment(installment.getNumber(), intent.getAmount(), now, charge.id());
+        accountStatementRepository.save(statement);
+        intent.succeed(charge.chargeId(), now);
+        intentRepository.save(intent);
+        return new Applied(PaymentGatewayEventOutcome.CREDITED, "installment %d of account statement %d"
+                .formatted(installment.getNumber(), statement.getId()));
     }
 
     private void notifyUnapplied(AccountStatement statement, InstallmentPaymentIntent intent, Installment installment,
@@ -424,30 +444,30 @@ public class InstallmentPaymentCommandServiceImpl implements InstallmentPaymentC
                         + "\nEl monto no se aplicó a la cuota: devuélvelo desde el panel de Stripe.");
     }
 
-    private Decision recordFailure(UUID intentId, @Nullable String message) {
+    private Logged recordFailure(PaymentGatewayEvent event, UUID intentId, @Nullable String message) {
         var reason = message == null || message.isBlank() ? "the payment was declined" : message;
         return Objects.requireNonNull(transactionTemplate.execute(status -> {
             var intent = intentRepository.findByIdForUpdate(intentId).orElseThrow();
             if (!intent.isOpen()) {
-                return new Decision(PaymentGatewayEventOutcome.FAILED,
+                return record(event, PaymentGatewayEventOutcome.FAILED,
                         "%s; payment %s was already %s".formatted(reason, intentId, intent.getStatus()));
             }
             intent.recordFailure(reason);
             intentRepository.save(intent);
-            return new Decision(PaymentGatewayEventOutcome.FAILED, reason);
+            return record(event, PaymentGatewayEventOutcome.FAILED, reason);
         }));
     }
 
-    private Decision recordCancellation(UUID intentId) {
+    private Logged recordCancellation(PaymentGatewayEvent event, UUID intentId) {
         return Objects.requireNonNull(transactionTemplate.execute(status -> {
             var intent = intentRepository.findByIdForUpdate(intentId).orElseThrow();
             if (!intent.isOpen()) {
-                return new Decision(PaymentGatewayEventOutcome.CANCELED,
+                return record(event, PaymentGatewayEventOutcome.CANCELED,
                         "payment %s was already %s".formatted(intentId, intent.getStatus()));
             }
             intent.cancel("canceled in the gateway");
             intentRepository.save(intent);
-            return new Decision(PaymentGatewayEventOutcome.CANCELED, null);
+            return record(event, PaymentGatewayEventOutcome.CANCELED, null);
         }));
     }
 
