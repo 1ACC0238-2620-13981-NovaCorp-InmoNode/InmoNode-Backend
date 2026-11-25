@@ -117,8 +117,11 @@ public final class ErrorResponseAssembler {
     public static HttpStatusCode toStatusFromErrorCode(String errorCode) {
         return switch (errorCode) {
             case "VALIDATION_ERROR", "VOUCHER_FILE_NOT_UPLOADED", "CONTRACT_FILE_NOT_UPLOADED",
-                 "IDENTITY_DOCUMENT_FILE_NOT_UPLOADED", "PROJECT_IMAGE_FILE_NOT_UPLOADED", "INVALID_RESET_TOKEN" ->
+                 "IDENTITY_DOCUMENT_FILE_NOT_UPLOADED", "PROJECT_IMAGE_FILE_NOT_UPLOADED", "INVALID_RESET_TOKEN",
+                 "INVALID_WEBHOOK_SIGNATURE" ->
                     HttpStatus.BAD_REQUEST;
+            case "PAYMENT_GATEWAY_ERROR", "SIGNATURE_PROVIDER_ERROR" -> HttpStatus.BAD_GATEWAY;
+            case "PAYMENTS_UNAVAILABLE", "SIGNATURES_UNAVAILABLE" -> HttpStatus.SERVICE_UNAVAILABLE;
             case String s when  s.endsWith("_NOT_FOUND") -> HttpStatus.NOT_FOUND;
             case "INVALID_CREDENTIALS", "INVALID_REFRESH_TOKEN", "UNAUTHORIZED" -> HttpStatus.UNAUTHORIZED;
             case "ACCOUNT_INACTIVE", "FORBIDDEN" -> HttpStatus.FORBIDDEN;

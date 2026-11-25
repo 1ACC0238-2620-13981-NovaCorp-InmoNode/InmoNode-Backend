@@ -1,6 +1,7 @@
 package com.novacorp.inmonode.inmonodebackend.financial.domain.model.entities;
 
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.InstallmentStatus;
+import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.PaymentSource;
 import org.jspecify.annotations.Nullable;
 
 import java.math.BigDecimal;
@@ -29,11 +30,14 @@ public class Installment {
     private BigDecimal penalty;
     private @Nullable Instant reminderSentAt;
     private @Nullable Instant overdueNotifiedAt;
+    private @Nullable PaymentSource paymentSource;
+    private @Nullable String paymentReference;
 
     private Installment(@Nullable Long id, int number, LocalDate dueDate, BigDecimal amount, BigDecimal principal,
                         BigDecimal interest, InstallmentStatus status, @Nullable Instant paidAt,
                         @Nullable BigDecimal paidAmount, BigDecimal penalty, @Nullable Instant reminderSentAt,
-                        @Nullable Instant overdueNotifiedAt) {
+                        @Nullable Instant overdueNotifiedAt, @Nullable PaymentSource paymentSource,
+                        @Nullable String paymentReference) {
         this.id = id;
         this.number = number;
         this.dueDate = dueDate;
@@ -46,6 +50,8 @@ public class Installment {
         this.penalty = penalty;
         this.reminderSentAt = reminderSentAt;
         this.overdueNotifiedAt = overdueNotifiedAt;
+        this.paymentSource = paymentSource;
+        this.paymentReference = paymentReference;
     }
 
     /** A new installment of the schedule, not paid and not due. */
@@ -57,16 +63,17 @@ public class Installment {
         var scaledPrincipal = principal.setScale(2, RoundingMode.HALF_UP);
         var scaledInterest = interest.setScale(2, RoundingMode.HALF_UP);
         return new Installment(null, number, dueDate, scaledPrincipal.add(scaledInterest), scaledPrincipal,
-                scaledInterest, InstallmentStatus.PENDING, null, null, BigDecimal.ZERO.setScale(2), null, null);
+                scaledInterest, InstallmentStatus.PENDING, null, null, BigDecimal.ZERO.setScale(2), null, null, null, null);
     }
 
     /** Rebuilds an already persisted installment. */
     public static Installment restore(Long id, int number, LocalDate dueDate, BigDecimal amount, BigDecimal principal,
                                       BigDecimal interest, InstallmentStatus status, @Nullable Instant paidAt,
                                       @Nullable BigDecimal paidAmount, BigDecimal penalty,
-                                      @Nullable Instant reminderSentAt, @Nullable Instant overdueNotifiedAt) {
+                                      @Nullable Instant reminderSentAt, @Nullable Instant overdueNotifiedAt,
+                                      @Nullable PaymentSource paymentSource, @Nullable String paymentReference) {
         return new Installment(id, number, dueDate, amount, principal, interest, status, paidAt, paidAmount, penalty,
-                reminderSentAt, overdueNotifiedAt);
+                reminderSentAt, overdueNotifiedAt, paymentSource, paymentReference);
     }
 
     /** What has to be paid to settle it: its amount plus the late fee, if any. */
@@ -127,6 +134,18 @@ public class Installment {
      * @throws IllegalArgumentException when the amount is not exactly what is due
      */
     public void registerPayment(BigDecimal paid, Instant at) {
+        registerPayment(paid, at, PaymentSource.BACK_OFFICE, null);
+    }
+
+    /**
+     * Records that it was paid from {@code source}; only its {@code AccountStatement} calls it.
+     *
+     * @param reference the gateway's payment reference; required for {@link PaymentSource#GATEWAY}, absent otherwise
+     * @throws IllegalStateException    when it is already paid
+     * @throws IllegalArgumentException when the amount is not exactly what is due, or the reference does not fit the
+     *                                  source
+     */
+    public void registerPayment(BigDecimal paid, Instant at, PaymentSource source, @Nullable String reference) {
         if (isPaid()) {
             throw new IllegalStateException("installment %d is already paid".formatted(number));
         }
@@ -134,9 +153,15 @@ public class Installment {
             throw new IllegalArgumentException("installment %d is settled with exactly %s"
                     .formatted(number, amountDue()));
         }
+        var hasReference = reference != null && !reference.isBlank();
+        if (source == null || hasReference != (source == PaymentSource.GATEWAY)) {
+            throw new IllegalArgumentException("a gateway payment needs its reference, and only it has one");
+        }
         status = InstallmentStatus.PAID;
         paidAt = at;
         paidAmount = paid.setScale(2, RoundingMode.HALF_UP);
+        paymentSource = source;
+        paymentReference = reference;
     }
 
     public @Nullable Long getId() { return id; }
@@ -151,4 +176,6 @@ public class Installment {
     public BigDecimal getPenalty() { return penalty; }
     public @Nullable Instant getReminderSentAt() { return reminderSentAt; }
     public @Nullable Instant getOverdueNotifiedAt() { return overdueNotifiedAt; }
+    public @Nullable PaymentSource getPaymentSource() { return paymentSource; }
+    public @Nullable String getPaymentReference() { return paymentReference; }
 }

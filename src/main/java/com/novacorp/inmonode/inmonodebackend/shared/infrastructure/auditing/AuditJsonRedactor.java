@@ -32,7 +32,8 @@ public final class AuditJsonRedactor {
         return name.contains("password") || name.contains("token") || name.contains("secret")
                 || name.contains("card") || name.equals("pan") || name.equals("cvv") || name.equals("cvc")
                 || name.contains("authorization") || name.contains("credential") || name.contains("accesskey")
-                || name.endsWith("url") || name.equals("headers") || name.equals("details")
+                || name.endsWith("url") || name.endsWith("src") || name.equals("slug")
+                || name.equals("headers") || name.equals("details")
                 || name.equals("documentnumber") || name.equals("fullname") || name.equals("phone")
                 || name.equals("objectkey");
     }

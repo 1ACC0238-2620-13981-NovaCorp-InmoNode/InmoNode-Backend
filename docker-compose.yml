@@ -119,7 +119,34 @@ services:
       # US-45: PDF requests go through the broker; the consumer aborts a rendering after this long.
       CLOUDAMQP_URL: amqp://${BROKER_USER:-inmonode-dev}:${BROKER_PASSWORD:-inmonode-dev-secret}@inmonode-broker:5672
       DOCUMENT_RENDER_TIMEOUT: ${DOCUMENT_RENDER_TIMEOUT:-PT30S}
+      # US-55: Stripe in test mode; without the keys, starting a payment answers 503 PAYMENTS_UNAVAILABLE.
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      STRIPE_PUBLISHABLE_KEY: ${STRIPE_PUBLISHABLE_KEY:-}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+      PAYMENT_INTENT_TTL: ${PAYMENT_INTENT_TTL:-PT30M}
+      # US-56: contracts signed through DocuSeal; without these, issued contracts wait to be sent to signature.
+      # With the "signature" profile, DOCUSEAL_URL is http://inmonode-signature:3000 and the public one
+      # http://localhost:3000.
+      DOCUSEAL_URL: ${DOCUSEAL_URL:-}
+      DOCUSEAL_PUBLIC_URL: ${DOCUSEAL_PUBLIC_URL:-}
+      DOCUSEAL_API_TOKEN: ${DOCUSEAL_API_TOKEN:-}
+      DOCUSEAL_WEBHOOK_SECRET: ${DOCUSEAL_WEBHOOK_SECRET:-}
+      DOCUSEAL_TEMPLATE_ID: ${DOCUSEAL_TEMPLATE_ID:-}
+
+  # US-56: the self-hosted DocuSeal, only with `docker compose --profile signature up`. Its first start asks for an
+  # admin account at http://localhost:3000; then upload the signature sheet template and add the webhook there.
+  inmonode-signature:
+    image: docuseal/docuseal:3.3.5
+    container_name: inmonode-signature
+    profiles: ["signature"]
+    environment:
+      HOST: localhost:3000
+    ports:
+      - "${SIGNATURE_HOST_PORT:-3000}:3000"
+    volumes:
+      - inmonode-signature-data:/data
 
 volumes:
   inmonode-db-data:
   inmonode-storage-data:
+  inmonode-signature-data:

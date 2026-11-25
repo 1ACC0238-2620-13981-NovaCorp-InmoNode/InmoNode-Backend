@@ -1,6 +1,7 @@
 package com.novacorp.inmonode.inmonodebackend.financial.infrastructure.persistence.jpa.entities;
 
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.InstallmentStatus;
+import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.PaymentSource;
 import com.novacorp.inmonode.inmonodebackend.shared.infrastructure.persistence.jpa.entities.AuditableAbstractPersistenceEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -60,4 +61,10 @@ public class InstallmentEntity extends AuditableAbstractPersistenceEntity {
     private Instant reminderSentAt;
 
     private Instant overdueNotifiedAt;
+
+    @Enumerated(EnumType.STRING)
+    @Column(length = 20)
+    private PaymentSource paymentSource;
+
+    private String paymentReference;
 }

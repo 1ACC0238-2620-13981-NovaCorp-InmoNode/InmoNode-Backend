@@ -57,7 +57,7 @@ public final class AccountStatementEntityAssembler {
         return Installment.restore(entity.getId(), entity.getNumber(), entity.getDueDate(), entity.getAmount(),
                 entity.getPrincipal(), entity.getInterest(), entity.getStatus(), entity.getPaidAt(),
                 entity.getPaidAmount(), entity.getPenalty(), entity.getReminderSentAt(),
-                entity.getOverdueNotifiedAt());
+                entity.getOverdueNotifiedAt(), entity.getPaymentSource(), entity.getPaymentReference());
     }
 
     private static void copyToEntity(Installment installment, InstallmentEntity entity) {
@@ -72,5 +72,7 @@ public final class AccountStatementEntityAssembler {
         entity.setPenalty(installment.getPenalty());
         entity.setReminderSentAt(installment.getReminderSentAt());
         entity.setOverdueNotifiedAt(installment.getOverdueNotifiedAt());
+        entity.setPaymentSource(installment.getPaymentSource());
+        entity.setPaymentReference(installment.getPaymentReference());
     }
 }

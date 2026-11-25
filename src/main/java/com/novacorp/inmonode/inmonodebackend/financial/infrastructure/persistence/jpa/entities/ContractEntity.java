@@ -62,4 +62,29 @@ public class ContractEntity extends AuditableAbstractPersistenceEntity {
     private Long issuedBy;
 
     private Instant buyerAcknowledgedAt;
+
+    @Column(length = 64)
+    private String documentSha256;
+
+    @Column(unique = true)
+    private Long signatureSubmissionId;
+
+    @Column(length = 500)
+    private String signingUrl;
+
+    private Instant signatureRequestedAt;
+
+    private Instant signedAt;
+
+    private String signedObjectKey;
+
+    private Long signedSizeBytes;
+
+    @Column(length = 64)
+    private String signedSha256;
+
+    private Instant signatureDeclinedAt;
+
+    @Column(length = 500)
+    private String signatureDeclineReason;
 }

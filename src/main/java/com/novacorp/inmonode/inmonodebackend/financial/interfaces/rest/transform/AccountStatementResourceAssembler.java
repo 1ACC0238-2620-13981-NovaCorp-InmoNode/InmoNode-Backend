@@ -25,6 +25,8 @@ public final class AccountStatementResourceAssembler {
         return new InstallmentResource(installment.getNumber(), installment.getDueDate(), installment.getAmount(),
                 installment.getPrincipal(), installment.getInterest(), installment.getPenalty(),
                 installment.amountDue(), installment.getStatus().name(), installment.getPaidAt(),
-                installment.getPaidAmount());
+                installment.getPaidAmount(),
+                installment.getPaymentSource() == null ? null : installment.getPaymentSource().name(),
+                installment.getPaymentReference());
     }
 }
