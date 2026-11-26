@@ -1,0 +1,42 @@
+name: Wake the backend for its daily jobs
+
+# Render's free instance sleeps after 15 minutes without requests, and a sleeping backend runs no scheduled job.
+# - 08:10 and 09:10 in Lima (UTC-5): the reminders of upcoming installments (08:00) and the review of overdue ones
+#   (08:05) already passed, so the backend runs them as it starts (InstallmentReviewJob). The second request covers
+#   a scheduled run that GitHub delays or drops.
+# - 01:52 UTC: keeps the backend awake for the database backup at 02:00 UTC, which is not caught up on start.
+# GitHub only runs schedules from the default branch, and stops them after 60 days without activity in the repo.
+on:
+  schedule:
+    - cron: '52 1 * * *'
+    - cron: '10 13 * * *'
+    - cron: '10 14 * * *'
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: wake-render
+  cancel-in-progress: false
+
+jobs:
+  wake:
+    name: Wake the backend
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      HEALTH_URL: https://inmonode-backend.onrender.com/health
+    steps:
+      - name: Request the health check until the backend answers
+        run: |
+          for attempt in $(seq 1 12); do
+            if curl --silent --show-error --fail --max-time 60 "$HEALTH_URL"; then
+              echo
+              echo "The backend is up (attempt $attempt)."
+              exit 0
+            fi
+            echo "Attempt $attempt: the backend is still starting."
+            sleep 20
+          done
+          echo "The backend did not answer within the attempts."
+          exit 1
