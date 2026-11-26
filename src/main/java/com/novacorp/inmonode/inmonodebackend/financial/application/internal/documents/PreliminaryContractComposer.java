@@ -12,6 +12,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Writes the preliminary purchase contract of a verified web reservation (US-21) from the server's own data, for the
@@ -22,6 +23,26 @@ import java.util.ArrayList;
 public final class PreliminaryContractComposer {
 
     public static final String TITLE = "Contrato preliminar de compraventa";
+
+    /**
+     * US-56: the buyer signs through a provider outside Peru's official infrastructure (IOFE), and under Ley 27269
+     * such a signature is worth what the parties agree. So the contract states that agreement, how the signature
+     * sheet is tied to the issued PDF by its SHA-256, and what proves the signature.
+     */
+    static final List<String> E_SIGNATURE_CLAUSE = List.of(
+            "SÉPTIMA: FIRMA ELECTRÓNICA",
+            "Las partes acuerdan que EL COMPRADOR firme con firma electrónica el contrato que LA EMPRESA emita sobre "
+                    + "este lote, conforme a la Ley N.° 27269, Ley de Firmas y Certificados Digitales, y a su "
+                    + "reglamento. Esa firma no es una firma digital de la Infraestructura Oficial de Firma "
+                    + "Electrónica, y las partes la aceptan como medio válido para que EL COMPRADOR manifieste su "
+                    + "voluntad y quede obligado por el contrato.",
+            "Al emitir el contrato, LA EMPRESA registra la huella SHA-256 de su PDF. EL COMPRADOR firma una hoja de "
+                    + "firma que cita el número del contrato, el lote, la fecha de emisión y esa huella, con el "
+                    + "enlace que recibe en el portal de compradores y en el correo de su cuenta. Así, la hoja "
+                    + "firmada corresponde a ese PDF y a ningún otro.",
+            "Las partes aceptan como prueba de la firma la constancia del servicio de firma electrónica, con la fecha "
+                    + "y la hora de la firma y el correo del firmante, y el sello electrónico de la hoja firmada. "
+                    + "LA EMPRESA conserva el contrato emitido y la hoja firmada.");
 
     private PreliminaryContractComposer() {
     }
@@ -94,6 +115,8 @@ public final class PreliminaryContractComposer {
         lines.add("SEXTA: CONFORMIDAD");
         lines.add("EL COMPRADOR revisa este contrato en el portal de compradores y registra allí su conformidad "
                 + "preliminar. La conformidad preliminar no reemplaza la firma electrónica del contrato definitivo.");
+        lines.add("");
+        lines.addAll(E_SIGNATURE_CLAUSE);
         return new DocumentContent(TITLE, lines);
     }
 

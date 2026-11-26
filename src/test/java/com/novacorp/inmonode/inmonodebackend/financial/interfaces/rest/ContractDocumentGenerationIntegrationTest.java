@@ -108,6 +108,11 @@ class ContractDocumentGenerationIntegrationTest {
         assertTrue(text.contains("S/ 45,000.00"), text);
         assertTrue(text.contains("S/ 9,000.00"), text);
         assertTrue(text.contains("buyer41@mail.com") || text.contains("comprador"), text);
+        // US-56: the issued PDF carries the agreement to sign it electronically; wrapped lines are joined again.
+        var flowing = text.replaceAll("\\s+", " ");
+        assertTrue(flowing.contains("SÉPTIMA: FIRMA ELECTRÓNICA"), text);
+        assertTrue(flowing.contains("conforme a la Ley N.° 27269, Ley de Firmas y Certificados Digitales"), text);
+        assertTrue(flowing.contains("LA EMPRESA conserva el contrato emitido y la hoja firmada."), text);
 
         mockMvc.perform(post("/api/v1/reservations/{id}/contract", transactionId)
                         .header(HttpHeaders.AUTHORIZATION, bearer(Role.FINANCE_ADMIN, ISSUER))
