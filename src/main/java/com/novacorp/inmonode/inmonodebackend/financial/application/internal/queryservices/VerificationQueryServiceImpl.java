@@ -2,6 +2,7 @@ package com.novacorp.inmonode.inmonodebackend.financial.application.internal.que
 
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.aggregates.Lot;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.aggregates.Reservation;
+import com.novacorp.inmonode.inmonodebackend.financial.domain.model.entities.PaymentEvidence;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.queries.GetPendingVerificationsQuery;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.PendingVerification;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.repositories.LotRepository;
@@ -22,7 +23,7 @@ import java.util.Optional;
 @Transactional(readOnly = true)
 public class VerificationQueryServiceImpl implements VerificationQueryService {
 
-    /** Like the other downloads: the link to the identity document photo is valid for 10 minutes. */
+    /** Like the other downloads: the links to the voucher and to the identity document photo last 10 minutes. */
     static final Duration DOWNLOAD_URL_VALIDITY = Duration.ofMinutes(10);
 
     private final ReservationRepository reservationRepository;
@@ -47,11 +48,18 @@ public class VerificationQueryServiceImpl implements VerificationQueryService {
                     return new PendingVerification(found.evidence(), reservation,
                             lots.computeIfAbsent(reservation.getLotId(),
                                     lotId -> lotRepository.findById(lotId).orElseThrow()),
+                            voucherFileLink(found.evidence()),
                             identityDocuments.computeIfAbsent(reservation.getId(),
                                     id -> Optional.ofNullable(identityDocumentLink(reservation))).orElse(null));
                 })
                 .toList();
         return new PageResult<>(items, page.totalCount(), page.page(), page.limit());
+    }
+
+    /** The reviewer looks at the voucher itself, not only at the data read from it, before deciding. */
+    private @Nullable PresignedDownload voucherFileLink(PaymentEvidence evidence) {
+        var objectKey = evidence.getObjectKey();
+        return objectKey == null ? null : objectStorage.presignDownload(objectKey, DOWNLOAD_URL_VALIDITY);
     }
 
     /** The reviewer compares the photo with the buyer's data before approving the payment (US-59). */

@@ -2,7 +2,9 @@ package com.novacorp.inmonode.inmonodebackend.financial.infrastructure.persisten
 
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.aggregates.Reservation;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.PaymentEvidenceStatus;
+import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.ReservationChannel;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.ReservationEvidence;
+import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.ReservationStatus;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.repositories.ReservationRepository;
 import com.novacorp.inmonode.inmonodebackend.financial.infrastructure.persistence.jpa.assemblers.ReservationEntityAssembler;
 import com.novacorp.inmonode.inmonodebackend.financial.infrastructure.persistence.jpa.entities.ReservationEntity;
@@ -78,6 +80,24 @@ public class ReservationRepositoryImpl implements ReservationRepository {
         }
         var items = ids.getContent().stream()
                 .map(byEvidenceId::get)
+                .filter(Objects::nonNull)
+                .toList();
+        return new PageResult<>(items, ids.getTotalElements(), pagination.page(), pagination.limit());
+    }
+
+    /** The same rule as {@code Contract.issuingObstacle}: only verified web reservations get a contract for now. */
+    @Override
+    public PageResult<Reservation> findAwaitingContract(PageRequest pagination) {
+        var ids = jpaRepository.findIdsWithoutContract(ReservationChannel.WEB, ReservationStatus.VERIFIED,
+                org.springframework.data.domain.PageRequest.of(pagination.page() - 1, pagination.limit()));
+        var byId = new HashMap<Long, Reservation>();
+        if (ids.hasContent()) {
+            for (var entity : jpaRepository.findAllById(ids.getContent())) {
+                byId.put(entity.getId(), ReservationEntityAssembler.toDomain(entity));
+            }
+        }
+        var items = ids.getContent().stream()
+                .map(byId::get)
                 .filter(Objects::nonNull)
                 .toList();
         return new PageResult<>(items, ids.getTotalElements(), pagination.page(), pagination.limit());

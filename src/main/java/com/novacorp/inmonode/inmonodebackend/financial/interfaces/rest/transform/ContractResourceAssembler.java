@@ -2,6 +2,7 @@ package com.novacorp.inmonode.inmonodebackend.financial.interfaces.rest.transfor
 
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.aggregates.Contract;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.ContractSignatureProgress;
+import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.ContractToIssue;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.ContractUpload;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.ReservationContract;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.SignatureDeliveryStatus;
@@ -10,13 +11,34 @@ import com.novacorp.inmonode.inmonodebackend.financial.interfaces.rest.resources
 import com.novacorp.inmonode.inmonodebackend.financial.interfaces.rest.resources.ContractAcknowledgmentResource;
 import com.novacorp.inmonode.inmonodebackend.financial.interfaces.rest.resources.ContractResource;
 import com.novacorp.inmonode.inmonodebackend.financial.interfaces.rest.resources.ContractSignatureRequestResource;
+import com.novacorp.inmonode.inmonodebackend.financial.interfaces.rest.resources.ContractToIssuePageResource;
+import com.novacorp.inmonode.inmonodebackend.financial.interfaces.rest.resources.ContractToIssueResource;
 import com.novacorp.inmonode.inmonodebackend.financial.interfaces.rest.resources.CoOwnerResource;
 import com.novacorp.inmonode.inmonodebackend.financial.interfaces.rest.resources.ContractUploadResource;
 import com.novacorp.inmonode.inmonodebackend.financial.interfaces.rest.resources.SignatureEventResource;
+import com.novacorp.inmonode.inmonodebackend.shared.domain.model.valueobjects.PageResult;
 
 public final class ContractResourceAssembler {
 
     private ContractResourceAssembler() {}
+
+    public static ContractToIssuePageResource toResourceFromToIssuePage(PageResult<ContractToIssue> page) {
+        return new ContractToIssuePageResource(
+                page.items().stream().map(ContractResourceAssembler::toResourceFromToIssue).toList(),
+                page.totalCount(), page.page(), page.limit());
+    }
+
+    public static ContractToIssueResource toResourceFromToIssue(ContractToIssue toIssue) {
+        var reservation = toIssue.reservation();
+        var coOwner = reservation.getCoOwner();
+        return new ContractToIssueResource(reservation.getId(), reservation.getSourceEventId(),
+                reservation.getRequesterId(), toIssue.buyerEmail(), toIssue.project().getId(),
+                toIssue.project().getName(), toIssue.lot().getId(), toIssue.lot().getCode(),
+                reservation.getInitialAmount().amount(), reservation.getInitialAmount().currency(),
+                reservation.getVerifiedAt(),
+                coOwner == null ? null
+                        : new CoOwnerResource(coOwner.fullName(), coOwner.documentType(), coOwner.documentNumber()));
+    }
 
     public static ContractResource toResourceFromContract(Contract contract) {
         var signed = contract.getSignedDocument();

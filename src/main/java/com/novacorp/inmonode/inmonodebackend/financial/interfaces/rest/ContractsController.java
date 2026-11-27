@@ -5,14 +5,17 @@ import com.novacorp.inmonode.inmonodebackend.financial.domain.model.commands.Iss
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.commands.RequestContractDocumentCommand;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.commands.RequestContractSignatureCommand;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.commands.RequestContractUploadCommand;
+import com.novacorp.inmonode.inmonodebackend.financial.domain.model.queries.GetContractsToIssueQuery;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.queries.GetReservationContractQuery;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.services.ContractCommandService;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.services.ContractDocumentCommandService;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.services.ContractQueryService;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.services.ContractSignatureCommandService;
 import com.novacorp.inmonode.inmonodebackend.financial.interfaces.rest.resources.ContractDocumentResource;
+import com.novacorp.inmonode.inmonodebackend.financial.interfaces.rest.resources.ContractToIssuePageResource;
 import com.novacorp.inmonode.inmonodebackend.financial.interfaces.rest.transform.ContractResourceAssembler;
 import com.novacorp.inmonode.inmonodebackend.financial.interfaces.rest.transform.DocumentRequestResourceAssembler;
+import com.novacorp.inmonode.inmonodebackend.shared.domain.model.valueobjects.PageRequest;
 import com.novacorp.inmonode.inmonodebackend.shared.interfaces.rest.transform.ResponseEntityAssembler;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -25,6 +28,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.UUID;
@@ -51,6 +55,26 @@ public class ContractsController {
         this.contractQueryService = contractQueryService;
         this.contractDocumentCommandService = contractDocumentCommandService;
         this.contractSignatureCommandService = contractSignatureCommandService;
+    }
+
+    @GetMapping("/contracts/to-issue")
+    @PreAuthorize("hasRole('FINANCE_ADMIN')")
+    @Operation(summary = "Get the queue of contracts to issue (US-21)",
+            description = "Finance back office only (FINANCE_ADMIN). The reservations whose contract can be issued "
+                    + "now: web reservations whose payment was verified and that have no contract yet, oldest "
+                    + "verifiedAt first with a reservationId tie-breaker, each with its buyer, project, lot and "
+                    + "co-owner. Use the transactionId of an entry to generate the PDF (POST "
+                    + "/reservations/{transactionId}/contract/document-requests) or upload one, then issue it (POST "
+                    + "/reservations/{transactionId}/contract); an issued one leaves the queue. Field reservations "
+                    + "do not get a contract yet, so they are not listed. Pages work as in GET /verifications/pending: "
+                    + "page starts at 1; limit defaults to 20 and is capped at 100; non-positive values return 400; "
+                    + "totalCount and the Total-Count header count every entry; a page past the end returns 200 with "
+                    + "no items.")
+    public ResponseEntity<ContractToIssuePageResource> getToIssue(@RequestParam(defaultValue = "1") int page,
+                                                                  @RequestParam(defaultValue = "20") int limit) {
+        var toIssue = contractQueryService.handle(new GetContractsToIssueQuery(new PageRequest(page, limit)));
+        return ResponseEntityAssembler.toPageResponseEntity(ContractResourceAssembler.toResourceFromToIssuePage(toIssue),
+                toIssue.totalCount());
     }
 
     @PostMapping("/reservations/{transactionId}/contract/document-requests")

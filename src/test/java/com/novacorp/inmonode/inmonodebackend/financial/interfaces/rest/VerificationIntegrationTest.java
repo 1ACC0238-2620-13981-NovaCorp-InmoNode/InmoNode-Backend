@@ -205,6 +205,24 @@ class VerificationIntegrationTest {
     }
 
     @Test
+    void theQueueLinksToTheVoucherFileSoTheReviewerCanSeeItBeforeDeciding() throws Exception {
+        var field = fieldReservation(lot("F-05"));
+        var web = webReservation(lot("W-03"));
+        var fieldEvidence = sendVoucher(field, "1500");
+        var webEvidence = sendVoucher(web, "9000");
+        var before = Instant.now();
+
+        var queue = queue();
+
+        assertTrue(((String) entry(queue, fieldEvidence, "voucherFileUrl")).contains("vouchers/" + field + "/"));
+        assertTrue(((String) entry(queue, webEvidence, "voucherFileUrl")).contains("vouchers/" + web + "/"),
+                "the web voucher is shown the same way");
+        var expiresAt = Instant.parse((String) entry(queue, fieldEvidence, "voucherFileUrlExpiresAt"));
+        assertTrue(expiresAt.isAfter(before.plus(Duration.ofMinutes(9))), "valid for 10 minutes");
+        assertTrue(expiresAt.isBefore(before.plus(Duration.ofMinutes(11))), "valid for 10 minutes");
+    }
+
+    @Test
     void approvingVerifiesTheReservationAndReservesTheLot() throws Exception {
         var lot = lot("A-01");
         var reservation = fieldReservation(lot);

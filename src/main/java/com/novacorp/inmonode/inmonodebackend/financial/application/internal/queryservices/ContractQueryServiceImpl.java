@@ -1,22 +1,31 @@
 package com.novacorp.inmonode.inmonodebackend.financial.application.internal.queryservices;
 
 import com.novacorp.inmonode.inmonodebackend.financial.application.internal.outboundservices.acl.ExternalIamService;
+import com.novacorp.inmonode.inmonodebackend.financial.domain.model.aggregates.Lot;
+import com.novacorp.inmonode.inmonodebackend.financial.domain.model.aggregates.Project;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.aggregates.Reservation;
+import com.novacorp.inmonode.inmonodebackend.financial.domain.model.queries.GetContractsToIssueQuery;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.queries.GetReservationContractQuery;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.ContractAvailability;
+import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.ContractToIssue;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.ReservationContract;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.ReservationStatus;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.repositories.ContractRepository;
+import com.novacorp.inmonode.inmonodebackend.financial.domain.repositories.LotRepository;
+import com.novacorp.inmonode.inmonodebackend.financial.domain.repositories.ProjectRepository;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.repositories.ReservationRepository;
 import com.novacorp.inmonode.inmonodebackend.financial.domain.services.ContractQueryService;
 import com.novacorp.inmonode.inmonodebackend.shared.application.result.ApplicationError;
 import com.novacorp.inmonode.inmonodebackend.shared.application.result.Result;
 import com.novacorp.inmonode.inmonodebackend.shared.application.storage.ObjectStorage;
+import com.novacorp.inmonode.inmonodebackend.shared.domain.model.valueobjects.PageResult;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
+import java.util.HashMap;
 import java.util.Objects;
+import java.util.Optional;
 
 @Service
 @Transactional(readOnly = true)
@@ -27,16 +36,42 @@ public class ContractQueryServiceImpl implements ContractQueryService {
 
     private final ReservationRepository reservationRepository;
     private final ContractRepository contractRepository;
+    private final LotRepository lotRepository;
+    private final ProjectRepository projectRepository;
     private final ObjectStorage objectStorage;
     private final ExternalIamService externalIamService;
 
     public ContractQueryServiceImpl(ReservationRepository reservationRepository,
-                                    ContractRepository contractRepository, ObjectStorage objectStorage,
+                                    ContractRepository contractRepository, LotRepository lotRepository,
+                                    ProjectRepository projectRepository, ObjectStorage objectStorage,
                                     ExternalIamService externalIamService) {
         this.reservationRepository = reservationRepository;
         this.contractRepository = contractRepository;
+        this.lotRepository = lotRepository;
+        this.projectRepository = projectRepository;
         this.objectStorage = objectStorage;
         this.externalIamService = externalIamService;
+    }
+
+    /** Lots, projects and buyers repeat across a page, so each one is read once. */
+    @Override
+    public PageResult<ContractToIssue> handle(GetContractsToIssueQuery query) {
+        var page = reservationRepository.findAwaitingContract(query.pagination());
+        var lots = new HashMap<Long, Lot>();
+        var projects = new HashMap<Long, Project>();
+        var buyerEmails = new HashMap<Long, Optional<String>>();
+        var items = page.items().stream()
+                .map(reservation -> {
+                    var lot = lots.computeIfAbsent(reservation.getLotId(),
+                            lotId -> lotRepository.findById(lotId).orElseThrow());
+                    var project = projects.computeIfAbsent(lot.getProjectId(),
+                            projectId -> projectRepository.findById(projectId).orElseThrow());
+                    var buyerEmail = buyerEmails.computeIfAbsent(reservation.getRequesterId(),
+                            externalIamService::emailOf).orElse(null);
+                    return new ContractToIssue(reservation, lot, project, buyerEmail);
+                })
+                .toList();
+        return new PageResult<>(items, page.totalCount(), page.page(), page.limit());
     }
 
     @Override

@@ -1,6 +1,8 @@
 package com.novacorp.inmonode.inmonodebackend.financial.infrastructure.persistence.jpa.repositories;
 
 import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.PaymentEvidenceStatus;
+import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.ReservationChannel;
+import com.novacorp.inmonode.inmonodebackend.financial.domain.model.valueobjects.ReservationStatus;
 import com.novacorp.inmonode.inmonodebackend.financial.infrastructure.persistence.jpa.entities.ReservationEntity;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -27,4 +29,16 @@ public interface ReservationJpaRepository extends JpaRepository<ReservationEntit
 
     @Query("select distinct r from ReservationEntity r join r.evidences e where e.id in :evidenceIds")
     List<ReservationEntity> findByEvidenceIds(@Param("evidenceIds") Collection<Long> evidenceIds);
+
+    /**
+     * Ids of one page of the reservations of this channel and status that have no contract, oldest verification
+     * first; the count query sizes the whole listing.
+     */
+    @Query(value = "select r.id from ReservationEntity r where r.channel = :channel and r.status = :status "
+            + "and not exists (select c.id from ContractEntity c where c.reservationId = r.id) "
+            + "order by r.verifiedAt, r.id",
+            countQuery = "select count(r) from ReservationEntity r where r.channel = :channel and r.status = :status "
+                    + "and not exists (select c.id from ContractEntity c where c.reservationId = r.id)")
+    Page<Long> findIdsWithoutContract(@Param("channel") ReservationChannel channel,
+                                      @Param("status") ReservationStatus status, Pageable pageable);
 }
