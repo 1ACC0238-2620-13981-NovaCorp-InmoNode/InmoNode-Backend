@@ -35,4 +35,11 @@ public interface ReservationRepository {
      * and the count of every pending evidence.
      */
     PageResult<ReservationEvidence> findPendingEvidences(PageRequest pagination);
+
+    /**
+     * One page of the reservations that can get their contract now (US-21), the ones {@code Contract.issuingObstacle}
+     * lets through and that have no contract yet: verified web reservations, oldest verification first with an id
+     * tie-breaker. The database reads only that page and the count of every such reservation.
+     */
+    PageResult<Reservation> findAwaitingContract(PageRequest pagination);
 }
