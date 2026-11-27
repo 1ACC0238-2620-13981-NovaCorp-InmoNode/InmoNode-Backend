@@ -9,9 +9,12 @@ import org.jspecify.annotations.Nullable;
 /**
  * One entry of the verification queue: a pending evidence with the reservation and the lot it pays for.
  *
+ * @param voucherFile      link to view the voucher file the evidence was read from, so the reviewer compares it with
+ *                         the data before deciding; {@code null} for an evidence without a file
  * @param identityDocument link to view the photo of the buyer's identity document the field agent attached (US-59);
  *                         {@code null} while it is pending and for a web reservation
  */
 public record PendingVerification(PaymentEvidence evidence, Reservation reservation, Lot lot,
+                                  @Nullable PresignedDownload voucherFile,
                                   @Nullable PresignedDownload identityDocument) {
 }

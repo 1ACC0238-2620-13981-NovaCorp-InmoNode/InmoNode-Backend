@@ -21,6 +21,7 @@ public final class VerificationResourceAssembler {
         var evidence = pending.evidence();
         var reservation = pending.reservation();
         var terms = reservation.getNegotiationTerms();
+        var voucherFile = pending.voucherFile();
         var identityDocument = pending.identityDocument();
         return new PendingVerificationResource(evidence.getId(), evidence.getReference(), evidence.getSource().name(),
                 evidence.getAmount().amount(), evidence.getAmount().currency(), evidence.getOperationDate(),
@@ -28,7 +29,9 @@ public final class VerificationResourceAssembler {
                 evidence.getSubmittedAt(), reservation.getId(), reservation.getSourceEventId(),
                 reservation.getChannel().name(), reservation.getRequesterId(), reservation.getStatus().name(),
                 reservation.getInitialAmount().amount(), pending.lot().getId(), pending.lot().getCode(),
-                terms.discountAmount(), terms.bonus(), terms.notes(), reservation.isIdentityDocumentPending(),
+                terms.discountAmount(), terms.bonus(), terms.notes(),
+                voucherFile == null ? null : voucherFile.url().toString(),
+                voucherFile == null ? null : voucherFile.expiresAt(), reservation.isIdentityDocumentPending(),
                 identityDocument == null ? null : identityDocument.url().toString(),
                 identityDocument == null ? null : identityDocument.expiresAt());
     }
